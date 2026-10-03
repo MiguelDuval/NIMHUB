@@ -1,0 +1,11 @@
+{
+  "name": "nim-hub",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev:client": "npm --prefix apps/client run dev",
+    "build:client": "npm --prefix apps/client run build",
+    "test:client": "npm --prefix apps/client run test",
+    "typecheck:client": "npm --prefix apps/client run typecheck"
+  }
+}
