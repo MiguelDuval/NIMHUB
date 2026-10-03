@@ -53,6 +53,12 @@ async def models() -> dict:
 @app.post('/api/chat')
 async def chat(request: ChatRequest):
     payload = request.model_dump(exclude_none=True)
+    # Validate API key early to return proper HTTP error before streaming starts
+    if not settings.nvidia_api_key:
+        raise HTTPException(
+            status_code=503,
+            detail={'code': 'NVIDIA_NOT_CONFIGURED', 'message': 'NVIDIA_API_KEY is not configured', 'retryable': False},
+        )
     try:
         if request.stream:
             return StreamingResponse(nim.chat_stream(payload), media_type='text/event-stream')

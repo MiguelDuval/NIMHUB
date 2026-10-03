@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">NIM Hub</string>
+    <string name="title_activity_main">NIM Hub</string>
+    <string name="package_name">com.miguelduval.nimhub</string>
+    <string name="custom_url_scheme">com.miguelduval.nimhub</string>
+</resources>
