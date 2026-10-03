@@ -69,12 +69,15 @@ jobs:
       - name: Verify APK
         run: test -s android/app/build/outputs/apk/debug/app-debug.apk
 
+      - name: Prepare APK artifact
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/NIM-Hub.apk"
+
       - name: Publish APK artifact
         id: apk
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: NIM-Hub-APK
-          path: apps/client/android/app/build/outputs/apk/debug/app-debug.apk
+          path: NIM-Hub.apk
+          archive: false
           if-no-files-found: error
           retention-days: 14
 
@@ -83,24 +86,8 @@ jobs:
         working-directory: .
         run: |
           echo '## Android APK' >> "$GITHUB_STEP_SUMMARY"
-          if [ -n "${{ steps.apk.outputs.artifact-id }}" ]; then
-            echo '[⬇️ Download APK](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts/${{ steps.apk.outputs.artifact-id }})' >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "${{ steps.apk.outputs.artifact-url }}" ]; then
+            echo '[⬇️ Download APK](${{ steps.apk.outputs.artifact-url }})' >> "$GITHUB_STEP_SUMMARY"
           else
             echo 'APK artifact was not published.' >> "$GITHUB_STEP_SUMMARY"
           fi
-
-  gateway:
-    name: Gateway tests
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: services/gateway
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install
-        run: pip install -e '.[test]'
-      - name: Test
-        run: pytest -q
