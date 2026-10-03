@@ -1,0 +1,32 @@
+name: NVIDIA NIM smoke test
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 5 * * 1'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+      NVIDIA_BASE_URL: https://integrate.api.nvidia.com/v1
+    steps:
+      - name: Check whether a secret is configured
+        id: configured
+        run: test -n "$NVIDIA_API_KEY"
+      - name: Query NIM model catalog
+        if: steps.configured.outcome == 'success'
+        run: |
+          python - <<'PY'
+          import os, urllib.request
+          req = urllib.request.Request(
+              os.environ['NVIDIA_BASE_URL'] + '/models',
+              headers={'Authorization': 'Bearer ' + os.environ['NVIDIA_API_KEY']},
+          )
+          with urllib.request.urlopen(req, timeout=30) as r:
+              data = r.read()
+          if not data:
+              raise SystemExit('Empty NIM model response')
+          print('NVIDIA NIM /v1/models: OK')
+          PY
