@@ -90,5 +90,5 @@ jobs:
           if [[ "${TAG}" == v* ]]; then
             gh release create "${TAG}" "NIM-Hub-${TAG}.apk" --generate-notes --title "NIM Hub ${TAG}"
           else
-            gh release create "android-build-${{ github.run_number }}" "NIM-Hub-${TAG}.apk" --prerelease --title "NIM Hub Android build ${{ github.run_number }}" --notes "Manual Android APK build from ${{ github.sha }}."
+            gh release create "android-build-${{ github.run_number }}" "NIM-Hub-${TAG}.apk" --target "${{ github.sha }}" --prerelease --title "NIM Hub Android build ${{ github.run_number }}" --notes "Manual Android APK build from ${{ github.sha }}."
           fi
