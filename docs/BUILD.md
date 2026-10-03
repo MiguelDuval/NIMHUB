@@ -11,7 +11,7 @@ It installs Node 22 and Java 21; configures the Android SDK; accepts licenses; i
 ## APK artifact
 The artifact contains exactly NIM-Hub.apk.
 
-GitHub Actions currently exposes workflow artifacts as archived downloads. The artifact itself contains only the single APK; the outer download packaging is controlled by GitHub.
+The workflow uses the current upload-artifact unarchived mode (`archive: false`) so the single APK is uploaded as-is. The artifact's download URL is exposed by the action output and shown as the blue Download APK link in the run summary. GitHub requires the viewer to be signed in to access the artifact URL.
 
 ## No releases
 NIM Hub does not use GitHub Releases for routine development builds. Every push produces the downloadable APK artifact after a successful Android build.
