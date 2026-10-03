@@ -90,7 +90,7 @@ jobs:
 
       - name: Rename APK
         working-directory: .
-        run: cp apps/client/android/app/build/outputs/apk/debug/app-debug.apk "NIM-Hub-${{ github.ref_name }}.apk"
+        run: cp apps/client/android/app/build/outputs/apk/debug/app-debug.apk "NIM-Hub.apk"
 
       - name: Publish raw APK to GitHub Release
         working-directory: .
@@ -99,7 +99,7 @@ jobs:
         run: |
           TAG="${{ github.ref_name }}"
           if [[ "${TAG}" == v* ]]; then
-            gh release create "${TAG}" "NIM-Hub-${TAG}.apk" --generate-notes --title "NIM Hub ${TAG}"
+            gh release create "${TAG}" "NIM-Hub.apk" --generate-notes --title "NIM Hub ${TAG}"
           else
-            gh release create "android-build-${{ github.run_number }}" "NIM-Hub-${TAG}.apk" --target "${{ github.sha }}" --prerelease --title "NIM Hub Android build ${{ github.run_number }}" --notes "Manual Android APK build from ${{ github.sha }}."
+            gh release create "android-build-${{ github.run_number }}" "NIM-Hub.apk" --target "${{ github.sha }}" --prerelease --title "NIM Hub Android build ${{ github.run_number }}" --notes "Manual Android APK build from ${{ github.sha }}."
           fi
