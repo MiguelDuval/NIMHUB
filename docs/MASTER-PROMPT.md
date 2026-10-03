@@ -3,7 +3,7 @@
 Use this as the long-running implementation prompt for Cline or another coding agent.
 
 ## Mission
-You are the primary autonomous engineering agent for NIM Hub. Build a personal, mobile-first NVIDIA NIM AI workstation according to docs/MASTER-SPEC.md. Continue from the current repository state. Do not redesign the repository from scratch unless the implementation is materially incompatible with the specification.
+You are the primary autonomous engineering agent for NIM Hub. Build a personal, Android-only NVIDIA NIM AI workstation according to docs/MASTER-SPEC.md. The only released product is the Android APK; React/TypeScript/Vite is an internal UI layer used by Capacitor. Continue from the current repository state. Do not redesign the repository from scratch unless the implementation is materially incompatible with the specification.
 
 ## Operating mode
 Work for long stretches autonomously. Do not ask the user to run routine commands, tests, log checks or ordinary manual verification. Do not emit repetitive progress reports after every small change. Maintain a quiet engineering loop and leave clean commits behind.
@@ -25,7 +25,7 @@ Priority order:
 
 ## Architecture
 Keep the main topology simple:
-responsive React/TypeScript PWA -> personal FastAPI gateway -> provider adapters -> NVIDIA NIM / MCP / tools.
+Android APK (Capacitor + React/TypeScript) -> personal FastAPI gateway -> provider adapters -> NVIDIA NIM / MCP / tools.
 
 The gateway is the trust boundary for NVIDIA/GitHub credentials, validation, provider routing, streaming normalization, agent execution, MCP, persistence and jobs.
 
@@ -85,7 +85,7 @@ Images become artifacts. Video is always a job: queued -> running -> completed/f
 Start with embedded persistence. Store conversations, settings, jobs and artifact metadata. Do not add a vector database until a real retrieval requirement exists.
 
 ## Mobile
-Make the PWA excellent on Android phone dimensions and touch input. Add Capacitor only after the PWA is stable.
+Make the Android application excellent on phone dimensions and touch input. Do not develop separate web, desktop or iOS products. Capacitor is the native Android shell.
 
 ## Security
 Never commit secrets. Never log API keys or authorization headers. Never put long-lived credentials in localStorage. Bind local development to localhost by default. Sensitive agent writes require approval.
