@@ -17,3 +17,5 @@ The release workflow optionally calls NVIDIA /v1/models when the NVIDIA_API_KEY 
 
 ## Capacitor
 The Android build currently uses Capacitor 8.5.2. Capacitor 8 requires Node 22+; Android development uses a current Android SDK and matching Capacitor target. Verify upstream requirements before major upgrades.
+
+Tagged or manual Android releases publish exactly one project-generated build asset: `NIM-Hub.apk`. The filename is intentionally stable so the latest-release download URL can remain stable.
