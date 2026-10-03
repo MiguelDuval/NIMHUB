@@ -72,3 +72,5 @@ GitHub may also show GitHub-generated source-code archives on the release page. 
 
 The GitHub NVIDIA secret is for CI/smoke testing. Do not compile it into the Android application.
 The installed Android app should talk to the personal gateway configured for runtime use.
+
+The asset name is `NIM-Hub.apk` for every release. This makes the latest-release direct-download URL stable: `https://github.com/MiguelDuval/NIMHUB/releases/latest/download/NIM-Hub.apk`.
