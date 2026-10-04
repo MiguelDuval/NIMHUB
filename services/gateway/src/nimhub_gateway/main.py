@@ -185,9 +185,11 @@ async def update_nvidia_settings(
 
 
 @app.get("/api/models")
-async def models() -> dict:
+async def models(
+    nvidia_api_key: str | None = Header(default=None, alias="X-NVIDIA-API-Key"),
+) -> dict:
     try:
-        return await nim.list_models()
+        return await nim.list_models(api_key=nvidia_api_key)
     except RuntimeError as exc:
         raise HTTPException(
             status_code=503,
