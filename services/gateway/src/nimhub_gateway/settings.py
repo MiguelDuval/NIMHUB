@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     nim_hub_host: str = "127.0.0.1"
     nim_hub_port: int = 8787
     nim_hub_allowed_origin: str = "http://localhost:5173"
+    mcp_servers_json: str | None = None
 
     model_config = SettingsConfigDict(env_file='.env', env_prefix='', extra='ignore')
 
