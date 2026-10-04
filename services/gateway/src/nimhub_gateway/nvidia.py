@@ -264,22 +264,34 @@ class NIMClient:
                 'data': normalized,
             }
 
-    async def chat(self, payload: dict) -> dict:
+    async def chat(
+        self,
+        payload: dict,
+        api_key: str | None = None,
+        base_url: str | None = None,
+    ) -> dict:
+        endpoint = (base_url or settings.nvidia_base_url).rstrip("/")
         async with httpx.AsyncClient(timeout=120) as client:
             response = await client.post(
-                f'{settings.nvidia_base_url.rstrip("/")}/chat/completions',
-                headers=self._headers(),
+                f'{endpoint}/chat/completions',
+                headers=self._headers(api_key),
                 json=payload,
             )
             response.raise_for_status()
             return response.json()
 
-    async def chat_stream(self, payload: dict) -> AsyncIterator[bytes]:
+    async def chat_stream(
+        self,
+        payload: dict,
+        api_key: str | None = None,
+        base_url: str | None = None,
+    ) -> AsyncIterator[bytes]:
+        endpoint = (base_url or settings.nvidia_base_url).rstrip("/")
         async with httpx.AsyncClient(timeout=None) as client:
             async with client.stream(
                 'POST',
-                f'{settings.nvidia_base_url.rstrip("/")}/chat/completions',
-                headers=self._headers(),
+                f'{endpoint}/chat/completions',
+                headers=self._headers(api_key),
                 json=payload,
             ) as response:
                 response.raise_for_status()
