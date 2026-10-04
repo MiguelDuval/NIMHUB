@@ -18,9 +18,17 @@ from .nvidia import NIMClient
 from .settings import settings
 
 app = FastAPI(title="NIM Hub Gateway", version="0.1.0")
+
+def _allowed_origins() -> list[str]:
+    values = [
+        settings.nim_hub_allowed_origin,
+        *settings.nim_hub_allowed_origins.split(","),
+    ]
+    return list(dict.fromkeys(value.strip() for value in values if value.strip()))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.nim_hub_allowed_origin],
+    allow_origins=_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
