@@ -537,6 +537,17 @@ class MCPRegistry:
             request.approval_grants,
         )
 
+        approved_token: str | None = None
+        if tool.requires_approval:
+            for grant in request.approval_grants:
+                if self._is_approved(tool, arguments_sha256, [grant]):
+                    approved_token = grant.approval_token
+                    break
+
+        if approved_token is not None:
+            # Consume the approval immediately before the external operation.
+            self._pending_approvals.pop(approved_token, None)
+
         async with self._connect(self.get_server(tool.server_id)) as client:
             result = await client.call_tool(tool.name, request.arguments)
 
