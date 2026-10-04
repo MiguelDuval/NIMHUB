@@ -44,7 +44,7 @@ public class NimhubMediaHttpPlugin extends Plugin {
 
     private void writeFilePart(OutputStream output, String boundary, String base64, String fileName, String mimeType) throws Exception {
         output.write((TWO_HYPHENS + boundary + CRLF).getBytes(StandardCharsets.UTF_8));
-        output.write(("Content-Disposition: form-data; name=\"file\"; filename=\"" + safeHeaderValue(fileName) + "\"" + CRLF).getBytes(StandardCharsets.UTF_8));
+        output.write(("Content-Disposition: form-data; name=\"" + safeHeaderValue(fieldName) + "\"; filename=\"" + safeHeaderValue(fileName) + "\"" + CRLF).getBytes(StandardCharsets.UTF_8));
         output.write(("Content-Type: " + safeHeaderValue(mimeType) + CRLF).getBytes(StandardCharsets.UTF_8));
         output.write(CRLF.getBytes(StandardCharsets.UTF_8));
         output.write(Base64.decode(base64, Base64.DEFAULT));
@@ -59,6 +59,7 @@ public class NimhubMediaHttpPlugin extends Plugin {
         String fileBase64 = call.getString("fileBase64");
         String fileName = call.getString("fileName", "upload.bin");
         String fileMimeType = call.getString("fileMimeType", "application/octet-stream");
+        String fileFieldName = call.getString("fileFieldName", "file");
         int connectTimeout = call.getInt("connectTimeout", 30000);
         int readTimeout = call.getInt("readTimeout", 120000);
 
@@ -88,7 +89,7 @@ public class NimhubMediaHttpPlugin extends Plugin {
                     }
                 }
                 if (fileBase64 != null && !fileBase64.isEmpty()) {
-                    writeFilePart(output, boundary, fileBase64, fileName, fileMimeType);
+                    writeFilePart(output, boundary, fileBase64, fileFieldName, fileName, fileMimeType);
                 }
                 output.write((TWO_HYPHENS + boundary + TWO_HYPHENS + CRLF).getBytes(StandardCharsets.UTF_8));
                 output.flush();

@@ -20,6 +20,7 @@ interface NimhubMediaHttpPlugin {
     apiKey: string;
     fields?: Record<string, string>;
     fileBase64?: string;
+    fileFieldName?: string;
     fileName?: string;
     fileMimeType?: string;
     connectTimeout?: number;
@@ -174,6 +175,7 @@ export async function editImage(request: ImageEditRequest): Promise<ImageEditRes
       response_format: request.response_format ?? 'b64_json',
     },
     fileBase64: await blobToBase64(request.image),
+    fileFieldName: 'image',
     fileName: request.fileName ?? 'image.png',
     fileMimeType: (request.mimeType ?? request.image.type) || 'image/png',
     connectTimeout: 30000,
