@@ -1,3 +1,4 @@
+import copy
 import json
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -49,13 +50,13 @@ class FakeNIM:
         self.payloads: list[dict] = []
 
     async def chat(self, payload: dict) -> dict:
-        self.payloads.append(payload)
+        self.payloads.append(copy.deepcopy(payload))
         if not self.responses:
             raise AssertionError("FakeNIM received more turns than expected")
         return self.responses.pop(0)
 
     async def chat_stream(self, payload: dict) -> AsyncIterator[bytes]:
-        self.payloads.append(payload)
+        self.payloads.append(copy.deepcopy(payload))
         yield b'data: {"id":"chat-1","object":"chat.completion.chunk","created":1,"model":"test-model","choices":[{"index":0,"delta":{"role":"assistant","content":"hel"},"finish_reason":null}]}\\n\\n'
         yield b'data: {"id":"chat-1","object":"chat.completion.chunk","created":1,"model":"test-model","choices":[{"index":0,"delta":{"content":"lo"},"finish_reason":"stop"}]}\\n\\n'
         yield b'data: [DONE]\\n\\n'
