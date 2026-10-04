@@ -5,6 +5,7 @@
 
 import type {
   ModelCapabilityInfo,
+  ModelCapability,
   NIMModelListResponse,
   ChatCompletionRequest,
   ChatCompletionResponse,
@@ -81,6 +82,7 @@ async function nativeNvidiaRequest<T>(
   method: 'GET' | 'POST',
   body?: unknown,
   apiKeyOverride?: string,
+  baseUrlOverride?: string,
 ): Promise<T> {
   if (!Capacitor.isNativePlatform()) {
     throw new Error('Native NVIDIA transport is available only in the Android app');
@@ -97,7 +99,7 @@ async function nativeNvidiaRequest<T>(
     );
   }
 
-  const baseUrl = getNvidiaBaseUrl();
+  const baseUrl = baseUrlOverride ? normalizeNvidiaBaseUrl(baseUrlOverride) : getNvidiaBaseUrl();
   const response = await CapacitorHttp.request({
     url: `${baseUrl}${path}`,
     method,
@@ -150,12 +152,24 @@ function normalizeDirectModels(data: any): ModelCapabilityInfo[] {
   const discoveredAt = new Date().toISOString();
   return models.map((model: Record<string, unknown>) => {
     const id = String(model.id ?? '').trim();
-    const rawCapabilities = Array.isArray(model.capabilities)
-      ? model.capabilities.filter((item): item is string => typeof item === 'string')
+    const rawCapabilities: ModelCapability[] = Array.isArray(model.capabilities)
+      ? model.capabilities.filter(
+          (item): item is ModelCapability =>
+            typeof item === 'string' &&
+            [
+              'chat',
+              'reasoning',
+              'vision',
+              'tool-calling',
+              'image-generation',
+              'video-generation',
+              'asr',
+              'tts',
+            ].includes(item as ModelCapability),
+        )
       : [];
-    const capabilities = rawCapabilities.length > 0
-      ? rawCapabilities
-      : ['chat'];
+    const capabilities: ModelCapability[] =
+      rawCapabilities.length > 0 ? rawCapabilities : ['chat'];
 
     return {
       id,
@@ -202,6 +216,7 @@ export const api = {
       'GET',
       undefined,
       settings.apiKey,
+      baseUrl,
     );
     return {
       modelsAvailable: Array.isArray(data?.data) ? data.data.length : 0,
