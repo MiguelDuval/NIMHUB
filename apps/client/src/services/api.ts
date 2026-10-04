@@ -68,7 +68,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return data as T;
 }
 
-async healthAt(gatewayUrl: string): Promise<HealthResponse> {
+async function healthAt(gatewayUrl: string): Promise<HealthResponse> {
   const response = await fetch(`${normalizeGatewayUrl(gatewayUrl)}/api/health`);
   return handleResponse<HealthResponse>(response);
 }
