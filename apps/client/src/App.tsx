@@ -636,7 +636,7 @@ export default function App() {
       )}
 
       <footer className="footer">
-        <span>Gateway: {GATEWAY_URL}</span>
+        <span>Gateway: {gatewayUrl}</span>
         <span>NIM Hub v0.1</span>
       </footer>
     </main>
