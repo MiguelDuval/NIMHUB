@@ -44,6 +44,60 @@ def request_json(path: str, *, method: str = "GET", body: dict | None = None) ->
         raise SystemExit(f"Gateway returned HTTP {exc.code} for {path}: {detail}") from exc
 
 
+class FakeNIM:
+    def __init__(self, tool_name: str, owner: str, repo: str, ref: str) -> None:
+        self.tool_name = tool_name
+        self.owner = owner
+        self.repo = repo
+        self.ref = ref
+        self.calls: list[dict] = []
+
+    async def chat(self, payload: dict) -> dict:
+        self.calls.append(payload)
+        if len(self.calls) == 1:
+            return {
+                "id": "smoke-chat-1",
+                "object": "chat.completion",
+                "created": 1,
+                "model": "smoke-model",
+                "choices": [{
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [{
+                            "id": "smoke-call-1",
+                            "type": "function",
+                            "function": {
+                                "name": self.tool_name,
+                                "arguments": json.dumps({
+                                    "owner": self.owner,
+                                    "repo": self.repo,
+                                    "path": "README.md",
+                                    "ref": self.ref,
+                                }),
+                            },
+                        }],
+                    },
+                    "finish_reason": "tool_calls",
+                }],
+            }
+
+        return {
+            "id": "smoke-chat-2",
+            "object": "chat.completion",
+            "created": 2,
+            "model": "smoke-model",
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": "GitHub MCP read completed.",
+                },
+                "finish_reason": "stop",
+            }],
+        }
+
 def main() -> None:
     servers = request_json("/api/mcp/servers")
     github_server = next(
@@ -112,6 +166,35 @@ def main() -> None:
             + json.dumps(result, ensure_ascii=False)[:2000]
         )
 
+    # Exercise the real AgentRuntime against the same discovered GitHub MCP
+    # server. FakeNIM only replaces the model provider; MCP remains real.
+    from nimhub_gateway.agent import AgentRunRequest, AgentRuntime
+    from nimhub_gateway.main import mcp_registry
+
+    fake_nim = FakeNIM(tool["model_name"], OWNER, REPO, REF)
+    agent_result = __import__("asyncio").run(
+        AgentRuntime(fake_nim, mcp_registry).run(
+            AgentRunRequest(
+                model="smoke-model",
+                messages=[{"role": "user", "content": "Read the NIM Hub README."}],
+            )
+        )
+    )
+    if agent_result.status != "completed":
+        raise SystemExit(f"Agent/MCP smoke did not complete: {agent_result.model_dump()!r}")
+
+    agent_tool_messages = [
+        message
+        for message in agent_result.messages
+        if message.get("role") == "tool"
+    ]
+    if not agent_tool_messages:
+        raise SystemExit("Agent/MCP smoke produced no tool result message")
+    if "NIM Hub" not in json.dumps(agent_tool_messages, ensure_ascii=False):
+        raise SystemExit("Agent/MCP smoke did not receive expected README content")
+    if len(fake_nim.calls) != 2:
+        raise SystemExit(f"Expected two Agent model turns, got {len(fake_nim.calls)}")
+
     print(
         json.dumps(
             {
@@ -122,6 +205,11 @@ def main() -> None:
                 "read_only": tool["read_only"],
                 "permission": tool["permission"],
                 "target": f"{OWNER}/{REPO}@{REF}",
+                "agent_runtime": {
+                    "status": agent_result.status,
+                    "model_turns": len(fake_nim.calls),
+                    "tool_results": len(agent_tool_messages),
+                },
             },
             ensure_ascii=False,
             sort_keys=True,
