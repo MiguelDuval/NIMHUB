@@ -1,3 +1,4 @@
+import { useCallback, useState } from 'react';
 import type { AgentApprovalRequest } from '../types';
 
 interface AgentApprovalCardProps {
@@ -13,7 +14,21 @@ export function AgentApprovalCard({
   onReject,
   busy = false,
 }: AgentApprovalCardProps) {
+  const [rejecting, setRejecting] = useState(false);
+
+  const handleReject = useCallback(async () => {
+    if (busy || rejecting) return;
+    setRejecting(true);
+    try {
+      await onReject();
+    } finally {
+      setRejecting(false);
+    }
+  }, [busy, onReject, rejecting]);
+
   if (approvals.length === 0) return null;
+
+  const actionBusy = busy || rejecting;
 
   return (
     <section className="agent-approval-card" aria-label="Tool approval required">
@@ -54,15 +69,15 @@ export function AgentApprovalCard({
         <div>
           <button
             className="btn-secondary"
-            onClick={onReject}
-            disabled={busy}
+            onClick={handleReject}
+            disabled={actionBusy}
           >
-            Not now
+            {rejecting ? 'Declining…' : 'Not now'}
           </button>
           <button
             className="btn-primary"
             onClick={onApprove}
-            disabled={busy}
+            disabled={actionBusy}
           >
             {busy ? 'Executing…' : 'Approve & Run'}
           </button>
