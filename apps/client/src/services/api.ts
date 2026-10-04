@@ -191,6 +191,23 @@ export const api = {
     return healthAt(gatewayUrl);
   },
 
+  async testNvidiaSettings(settings: NvidiaSettingsInput): Promise<{ modelsAvailable: number }> {
+    const baseUrl = normalizeNvidiaBaseUrl(settings.baseUrl);
+    if (!Capacitor.isNativePlatform()) {
+      throw new Error('NVIDIA direct setup is available in the Android app');
+    }
+
+    const data = await nativeNvidiaRequest<{ data: unknown[] }>(
+      '/models',
+      'GET',
+      undefined,
+      settings.apiKey,
+    );
+    return {
+      modelsAvailable: Array.isArray(data?.data) ? data.data.length : 0,
+    };
+  },
+
   /**
    * Configure NVIDIA on the gateway. Neither credential is persisted by the client.
    */
