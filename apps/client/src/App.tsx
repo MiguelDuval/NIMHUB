@@ -133,6 +133,7 @@ export default function App() {
     error: agentError,
     approvals: agentApprovals,
     streamingText: agentStreamingText,
+    activities: agentActivities,
     run: runAgent,
     approve: approveAgent,
     abort: abortAgent,
