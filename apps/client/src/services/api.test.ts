@@ -317,3 +317,53 @@ describe('MCP gateway API', () => {
     );
   });
 });
+
+
+describe('NVIDIA gateway settings API', () => {
+  it('saves NVIDIA settings through the gateway without returning the API key', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          nvidia_configured: true,
+          nvidia_base_url: 'https://integrate.api.nvidia.com/v1',
+          models_available: 3,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      api.saveNvidiaSettings(
+        {
+          apiKey: 'nvapi-test',
+          baseUrl: 'https://integrate.api.nvidia.com/v1',
+        },
+        'admin-secret',
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      nvidia_configured: true,
+      nvidia_base_url: 'https://integrate.api.nvidia.com/v1',
+      models_available: 3,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:8787/api/settings/nvidia',
+      expect.objectContaining({
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-NIM-Hub-Admin-Token': 'admin-secret',
+        },
+        body: JSON.stringify({
+          api_key: 'nvapi-test',
+          base_url: 'https://integrate.api.nvidia.com/v1',
+        }),
+      }),
+    );
+
+    vi.unstubAllGlobals();
+  });
+});
