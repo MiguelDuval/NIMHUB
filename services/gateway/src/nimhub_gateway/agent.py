@@ -585,8 +585,10 @@ class AgentRuntime:
 
     @staticmethod
     def _tool_error_event(call: dict[str, Any], message: str) -> dict[str, Any]:
+        function = call.get("function") or {}
         return {
             "type": "tool_error",
+            "tool": str(function.get("name") or "unknown"),
             "tool_call_id": str(call.get("id") or "unknown"),
             "message": message,
         }
