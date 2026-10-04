@@ -3,12 +3,14 @@ import { useConversations } from './hooks/useConversations';
 import { useModels } from './hooks/useModels';
 import { useChat } from './hooks/useChat';
 import { useAgent } from './hooks/useAgent';
+import { useMCPStatus } from './hooks/useMCPStatus';
 import { useAttachments } from './hooks/useAttachments';
 import { useGlobalEvents } from './hooks/useGlobalEvents';
 import { storage } from './services/storage';
 import type { ChatMessage, StoredMessage } from './types';
 import { Message } from './components/Message';
 import { ModelSelector } from './components/ModelSelector';
+import { MCPStatus } from './components/MCPStatus';
 import { ConversationList } from './components/ConversationList';
 import { WelcomeMessage } from './components/WelcomeMessage';
 import { Composer } from './components/Composer';
@@ -145,6 +147,14 @@ export default function App() {
   });
 
   const canUseAgent = selectedModel?.capabilities.includes('tool-calling') ?? false;
+  const {
+    servers: mcpServers,
+    tools: mcpTools,
+    loading: mcpLoading,
+    error: mcpError,
+    refresh: refreshMCP,
+  } = useMCPStatus(canUseAgent);
+
   const effectiveBusy =
     status === 'streaming' ||
     status === 'pending' ||
@@ -374,6 +384,14 @@ export default function App() {
             disabled={modelsLoading || effectiveBusy}
             showDetails={showModelDetails}
             onToggleDetails={() => setShowModelDetails(!showModelDetails)}
+          />
+          <MCPStatus
+            enabled={canUseAgent}
+            servers={mcpServers}
+            tools={mcpTools}
+            loading={mcpLoading}
+            error={mcpError}
+            onRefresh={refreshMCP}
           />
         </div>
         <div className="topbar-right">
