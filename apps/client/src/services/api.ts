@@ -17,6 +17,8 @@ import type {
   AgentRunRequest,
   AgentRunResponse,
   AgentStreamEvent,
+  NvidiaSettingsInput,
+  NvidiaSettingsResponse,
 } from '../types';
 import { transformModels } from './models';
 import { getGatewayUrl, normalizeGatewayUrl } from './gatewayConfig';
@@ -86,6 +88,27 @@ export const api = {
    */
   async healthAt(gatewayUrl: string): Promise<HealthResponse> {
     return healthAt(gatewayUrl);
+  },
+
+  /**
+   * Configure NVIDIA on the gateway. Neither credential is persisted by the client.
+   */
+  async saveNvidiaSettings(
+    settings: NvidiaSettingsInput,
+    adminToken: string,
+  ): Promise<NvidiaSettingsResponse> {
+    const response = await fetch(`${getGatewayUrl()}/api/settings/nvidia`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-NIM-Hub-Admin-Token': adminToken,
+      },
+      body: JSON.stringify({
+        api_key: settings.apiKey,
+        base_url: settings.baseUrl,
+      }),
+    });
+    return handleResponse<NvidiaSettingsResponse>(response);
   },
 
   /**
