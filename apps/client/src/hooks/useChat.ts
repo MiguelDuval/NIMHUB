@@ -15,6 +15,7 @@ interface UseChatOptions {
   onChunk?: (content: string, assistantMessageId?: string) => void;
   onComplete?: (response: ChatCompletionResponse, assistantMessageId?: string) => void;
   onError?: (error: APIError, assistantMessageId?: string) => void;
+  onAbort?: (assistantMessageId?: string) => void;
 }
 
 interface UseChatReturn {
@@ -35,6 +36,7 @@ export function useChat({
   onChunk,
   onComplete,
   onError,
+  onAbort,
 }: UseChatOptions): UseChatReturn {
   const [status, setStatus] = useState<ChatStatus>('idle');
   const [error, setError] = useState<APIError | null>(null);
@@ -50,11 +52,13 @@ export function useChat({
   const onChunkRef = useRef(onChunk);
   const onCompleteRef = useRef(onComplete);
   const onErrorRef = useRef(onError);
+  const onAbortRef = useRef(onAbort);
 
   // Update refs when callbacks change
   useEffect(() => { onChunkRef.current = onChunk; }, [onChunk]);
   useEffect(() => { onCompleteRef.current = onComplete; }, [onComplete]);
   useEffect(() => { onErrorRef.current = onError; }, [onError]);
+  useEffect(() => { onAbortRef.current = onAbort; }, [onAbort]);
 
   // Update ref when messages change (for retry to use current messages)
   useEffect(() => {
@@ -73,10 +77,13 @@ export function useChat({
   }, []);
 
   const abort = useCallback(() => {
+    const assistantMessageId = assistantMessageIdRef.current;
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    onAbortRef.current?.(assistantMessageId);
+    assistantMessageIdRef.current = undefined;
     setStatus('cancelled');
   }, []);
 
@@ -145,6 +152,7 @@ export function useChat({
               }],
             };
             onCompleteRef.current?.(response, assistantMessageId);
+            assistantMessageIdRef.current = undefined;
           }
         } else {
           const response = await api.chat(request);
@@ -173,6 +181,7 @@ export function useChat({
         setError(apiError);
         setStatus('error');
         onErrorRef.current?.(apiError, assistantMessageId);
+        assistantMessageIdRef.current = undefined;
       }
     },
     [modelId]
