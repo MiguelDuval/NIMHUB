@@ -21,8 +21,8 @@ from .mcp import (
     MCPPolicyError,
     MCPRegistry,
     MCPToolDefinition,
+    MCPToolCallRequest,
     MCPToolResult,
-    canonical_arguments_sha256,
 )
 from .nvidia import NIMClient
 
@@ -225,7 +225,7 @@ class AgentRuntime:
                     arguments_sha256 = await self.mcp.authorize_tool_call(
                         tool,
                         arguments,
-                        [],
+                        request.approval_grants,
                     )
                 except MCPApprovalRequired as exc:
                     arguments = self._parse_arguments(call)
@@ -253,29 +253,12 @@ class AgentRuntime:
             for call, tool, arguments in parsed_calls:
                 try:
                     result = await self.mcp.call_tool(
-                        request=__import__("nimhub_gateway.mcp", fromlist=["MCPToolCallRequest"]).MCPToolCallRequest(
+                        MCPToolCallRequest(
                             tool=tool.qualified_name,
                             arguments=arguments,
-                            approval_grants=[],
+                            approval_grants=request.approval_grants,
                         )
                     )
-                except MCPApprovalRequired:
-                    # Defensive race-safe path if the server/tool metadata changed.
-                    grant = MCPApprovalGrant(
-                        tool=tool.qualified_name,
-                        arguments_sha256=canonical_arguments_sha256(arguments),
-                    )
-                    try:
-                        result = await self.mcp.call_tool(
-                            request=__import__("nimhub_gateway.mcp", fromlist=["MCPToolCallRequest"]).MCPToolCallRequest(
-                                tool=tool.qualified_name,
-                                arguments=arguments,
-                                approval_grants=[grant],
-                            )
-                        )
-                    except Exception as exc:
-                        hard_errors.append((call, str(exc)))
-                        continue
                 except Exception as exc:
                     hard_errors.append((call, str(exc)))
                     continue
@@ -402,7 +385,11 @@ class AgentRuntime:
 
                 try:
                     arguments = self._parse_arguments(call)
-                    arguments_sha256 = await self.mcp.authorize_tool_call(tool, arguments, [])
+                    arguments_sha256 = await self.mcp.authorize_tool_call(
+                        tool,
+                        arguments,
+                        request.approval_grants,
+                    )
                 except MCPApprovalRequired as exc:
                     arguments = self._parse_arguments(call)
                     pending.append(self._approval_request(tool, arguments, exc.arguments_sha256))
@@ -424,9 +411,10 @@ class AgentRuntime:
             for call, tool, arguments in executable:
                 try:
                     result = await self.mcp.call_tool(
-                        __import__("nimhub_gateway.mcp", fromlist=["MCPToolCallRequest"]).MCPToolCallRequest(
+                        MCPToolCallRequest(
                             tool=tool.qualified_name,
                             arguments=arguments,
+                            approval_grants=request.approval_grants,
                         )
                     )
                     messages.append(self._tool_result_message(call, result))
