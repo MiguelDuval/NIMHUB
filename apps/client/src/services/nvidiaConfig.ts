@@ -23,8 +23,8 @@ function normalizeBaseUrl(value: string): string {
 
   parsed.hash = '';
   parsed.search = '';
-  parsed.pathname = parsed.pathname.replace(/\\/+$/, '');
-  return parsed.toString().replace(/\\/$/, '');
+  parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+  return parsed.toString().replace(/\/$/, '');
 }
 
 export function getNvidiaBaseUrl(): string {
