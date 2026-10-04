@@ -167,7 +167,7 @@ function normalizeDirectModels(data: any): ModelCapabilityInfo[] {
     // NVIDIA currently advertises Nemotron 3 Ultra as agentic/tool-use capable.
     // /models metadata is inconsistent across hosted endpoints, so retain a
     // narrow, explicit family heuristic rather than enabling tools for unknown IDs.
-    if (/nemotron[-_/](?:3[-_.]ultra|3\.5)|qwen3[-_/]coder|kimi[-_/]k2/.test(value)) {
+    if (/nemotron[-_/](?:3[-_.]ultra|3\.5)|qwen3[-_/]coder|kimi[-_/]k2|glm[-_/]5[-_.]3(?:[-_/]flash)?|muse[-_/]glimmer/.test(value)) {
       return { endpointFamily: 'chat', capabilities: ['chat', 'reasoning', 'tool-calling'] };
     }
     return null;

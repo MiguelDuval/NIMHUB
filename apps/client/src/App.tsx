@@ -191,10 +191,16 @@ export default function App() {
     element.scrollTop = element.scrollHeight;
   }, [chatMessages.length, streamingContent, agentStreamingText, agentApprovals.length]);
 
-  const canUseAgent =
-    gatewayStatus === 'connected' &&
-    nvidiaConfigured === true &&
-    (selectedModel?.capabilities.includes('tool-calling') ?? false);
+  const agentAvailabilityReason =
+    gatewayStatus !== 'connected'
+      ? 'Connect Personal Gateway in Settings to use Agent/MCP'
+      : nvidiaConfigured !== true
+      ? 'Connect the NVIDIA Chat key in Settings'
+      : !(selectedModel?.capabilities.includes('tool-calling') ?? false)
+      ? 'Selected model is not known to support tool calling'
+      : null;
+
+  const canUseAgent = agentAvailabilityReason === null;
   const {
     servers: mcpServers,
     tools: mcpTools,
