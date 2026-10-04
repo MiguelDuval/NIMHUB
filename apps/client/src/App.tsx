@@ -376,7 +376,7 @@ export default function App() {
     }
   }, [agentMode, canUseAgent, resetAgent]);
 
-  const allErrors = [modelsError, attachmentError, chatError, conversationsError, gatewayError]
+  const allErrors = [modelsError, attachmentError, chatError, conversationsError]
     .filter(Boolean) as Error[];
 
   if (conversationsLoading) {
@@ -401,14 +401,32 @@ export default function App() {
       ? 'Agent error'
       : null;
 
+  const workstationStatusLabel =
+    gatewayStatus === 'checking'
+      ? 'Connecting…'
+      : gatewayStatus === 'error'
+      ? 'Gateway offline'
+      : nvidiaConfigured === false
+      ? 'NVIDIA key missing'
+      : modelsLoading
+      ? 'Loading models…'
+      : agentActiveLabel ??
+        (status === 'streaming'
+          ? 'Streaming…'
+          : status === 'pending'
+          ? 'Sending…'
+          : status === 'error'
+          ? 'Error'
+          : 'Ready');
+
   const statusClass =
-    agentStatus === 'running'
-      ? 'pending'
-      : agentStatus === 'approval_required'
-      ? 'pending'
-      : agentStatus === 'error'
+    gatewayStatus === 'error' || status === 'error' || agentStatus === 'error'
       ? 'error'
-      : status;
+      : gatewayStatus === 'checking' || modelsLoading ||
+        status === 'streaming' || status === 'pending' ||
+        agentStatus === 'running' || agentStatus === 'approval_required'
+      ? 'pending'
+      : 'success';
 
   return (
     <main className="shell">
@@ -435,6 +453,7 @@ export default function App() {
             selectedModelId={selectedModelId}
             onChange={handleModelChange}
             disabled={modelsLoading || effectiveBusy}
+            loading={modelsLoading}
             showDetails={showModelDetails}
             onToggleDetails={() => setShowModelDetails(!showModelDetails)}
           />
@@ -467,14 +486,7 @@ export default function App() {
           <div className={"status-indicator " + statusClass}>
             <span className="status-dot"></span>
             <span>
-              {agentActiveLabel ??
-                (status === 'streaming'
-                  ? 'Streaming...'
-                  : status === 'pending'
-                  ? 'Sending...'
-                  : status === 'error'
-                  ? 'Error'
-                  : 'Ready')}
+              {workstationStatusLabel}
             </span>
           </div>
           <button
