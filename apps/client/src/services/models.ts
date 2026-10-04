@@ -93,8 +93,8 @@ export function getModelDisplayName(model: ModelCapabilityInfo): string {
  */
 export function getContextWindowDisplay(model: ModelCapabilityInfo): string {
   if (!model.contextWindow) return 'Unknown';
-  const k = model.contextWindow / 1000;
-  return k >= 100 ? `${(k / 1000).toFixed(0)}M` : `${k.toFixed(0)}k`;
+  const k = model.contextWindow / 1024;
+  return k >= 1024 ? `${(k / 1024).toFixed(0)}M` : `${k.toFixed(0)}k`;
 }
 
 /**
