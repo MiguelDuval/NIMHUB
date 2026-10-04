@@ -321,7 +321,10 @@ async def agent(
     if request.stream:
         async def event_stream():
             try:
-                async for event in agent_runtime.stream(request):
+                async for event in agent_runtime.stream(
+                    request,
+                    api_key=nvidia_api_key,
+                ):
                     yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
             except MCPConfigError as exc:
                 yield (
