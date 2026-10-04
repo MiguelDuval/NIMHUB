@@ -336,6 +336,15 @@ export default function App() {
       ? 'Agent error'
       : null;
 
+  const statusClass =
+    agentStatus === 'running'
+      ? 'pending'
+      : agentStatus === 'approval_required'
+      ? 'pending'
+      : agentStatus === 'error'
+      ? 'error'
+      : status;
+
   return (
     <main className="shell">
       <header className="topbar">
@@ -366,7 +375,7 @@ export default function App() {
           />
         </div>
         <div className="topbar-right">
-          <div className={"status-indicator " + (agentStatus === 'error' ? 'error' : status)}>
+          <div className={"status-indicator " + statusClass}>
             <span className="status-dot"></span>
             <span>
               {agentActiveLabel ??
@@ -487,7 +496,7 @@ export default function App() {
                   <div className="message-content">
                     <div className="error-content">
                       <p>{chatError.message}</p>
-                      <div className="error-code">Code: {chatError.code}</div>
+                      <div className="error-code">{chatError.code}</div>
                       {isRetryable && (
                         <button className="btn-retry" onClick={handleRetry}>
                           Retry ({retryCount + 1}/3)
@@ -523,7 +532,12 @@ export default function App() {
               onAbort={handleAbort}
               attachments={attachments}
               onRemoveAttachment={removeImage}
-              disabled={!selectedModelId || (agentMode && !canUseAgent) || effectiveBusy}
+              disabled={
+                !selectedModelId ||
+                (agentMode && !canUseAgent) ||
+                effectiveBusy ||
+                (agentMode && agentStatus === 'approval_required')
+              }
               streaming={status === 'streaming' || agentStatus === 'running'}
               canSend={canSend}
               visionEnabled={selectedModel?.capabilities.includes('vision') ?? false}
