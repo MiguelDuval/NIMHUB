@@ -193,13 +193,23 @@ export default function App() {
 
   const handleModelChange = useCallback(
     (modelId: string) => {
+      resetAgent();
       selectModel(modelId);
       if (currentConversation) {
         updateConversation(currentConversation.id, { modelId });
       }
     },
-    [selectModel, currentConversation, updateConversation]
+    [selectModel, currentConversation, updateConversation, resetAgent]
   );
+
+  const handleAgentToggle = useCallback(() => {
+    if (agentMode) {
+      setAgentMode(false);
+      resetAgent();
+      return;
+    }
+    setAgentMode(true);
+  }, [agentMode, resetAgent]);
 
   const handleConversationSelect = useCallback(
     async (conversationId: string) => {
@@ -285,7 +295,7 @@ export default function App() {
         <div className="topbar-center">
           <button
             className={'mode-toggle ' + (agentMode ? 'active' : '')}
-            onClick={() => setAgentMode((enabled) => !enabled)}
+            onClick={handleAgentToggle}
             disabled={!canUseAgent || effectiveBusy}
             title={
               canUseAgent
