@@ -22,10 +22,6 @@ def deterministic_echo(value: str) -> str:
     return f"deterministic:{value}"
 
 
-if __name__ == "__main__":
-    mcp.run()
-
-
 @mcp.tool(
     description="A protected deterministic write used to verify approval handling.",
     annotations=ToolAnnotations(
@@ -37,3 +33,7 @@ if __name__ == "__main__":
 )
 def protected_write(value: str) -> str:
     return f"protected:{value}"
+
+
+if __name__ == "__main__":
+    mcp.run()
