@@ -26,6 +26,6 @@ Ask only for missing credentials, destructive external actions or genuinely unre
 8. Stop on a normal assistant response, an approval request, or the bounded maximum turn count.
 9. Streaming emits content/tool/approval events over SSE while preserving the same state machine.
 
-Approval grants are SHA-256 hashes of canonical JSON arguments plus the exact tool identifier. A changed argument payload therefore cannot reuse an earlier approval.
+Approval grants contain a short-lived, gateway-issued opaque token plus the SHA-256 hash of canonical JSON arguments. The gateway binds the token to the exact tool and consumes it on execution, so the client cannot mint an approval from a hash alone.
 
 The client receives only sanitized server/tool metadata and approval information. Tool schemas and MCP credentials remain gateway-side.
