@@ -212,4 +212,48 @@
 .tool-call-chip span {
   opacity: 0.55;
 }
+.agent-activity {
+  margin: 10px 18px 0;
+  display: grid;
+  gap: 6px;
+}
+
+.agent-activity-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-height: 28px;
+  padding: 6px 9px;
+  border: 1px solid var(--border-color, rgba(255,255,255,0.09));
+  border-radius: 8px;
+  background: rgba(255,255,255,0.025);
+  font-size: 11px;
+}
+
+.agent-activity-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: currentColor;
+}
+
+.agent-activity-dot.tool_result {
+  color: #22c55e;
+}
+
+.agent-activity-dot.tool_error {
+  color: #ef4444;
+}
+
+.agent-activity-label {
+  opacity: 0.58;
+}
+
+.agent-activity-message {
+  opacity: 0.72;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 
