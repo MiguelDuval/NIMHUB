@@ -92,7 +92,21 @@ export interface HealthResponse {
   ok: boolean;
   service: string;
   nvidia_configured: boolean;
+  nvidia_base_url?: string;
+  admin_configured?: boolean;
   mcp_servers_configured?: number;
+}
+
+export interface NvidiaSettingsInput {
+  apiKey: string;
+  baseUrl: string;
+}
+
+export interface NvidiaSettingsResponse {
+  ok: boolean;
+  nvidia_configured: boolean;
+  nvidia_base_url: string;
+  models_available: number;
 }
 
 // ============================================================================
