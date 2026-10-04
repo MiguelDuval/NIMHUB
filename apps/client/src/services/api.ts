@@ -22,6 +22,8 @@ import type {
 } from '../types';
 import { transformModels } from './models';
 import { getGatewayUrl, normalizeGatewayUrl } from './gatewayConfig';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
+import { getNvidiaApiKey, getNvidiaBaseUrl, hasNvidiaApiKey } from './nvidiaConfig';
 
 export class APIError extends Error {
   public readonly code: string;
@@ -74,6 +76,105 @@ async function healthAt(gatewayUrl: string): Promise<HealthResponse> {
   const response = await fetch(`${normalizeGatewayUrl(gatewayUrl)}/api/health`);
   return handleResponse<HealthResponse>(response);
 }
+async function nativeNvidiaRequest<T>(
+  path: string,
+  method: 'GET' | 'POST',
+  body?: unknown,
+  apiKeyOverride?: string,
+): Promise<T> {
+  if (!Capacitor.isNativePlatform()) {
+    throw new Error('Native NVIDIA transport is available only in the Android app');
+  }
+
+  const apiKey = apiKeyOverride?.trim() || await getNvidiaApiKey();
+  if (!apiKey) {
+    throw new APIError(
+      'NVIDIA API key is not configured',
+      'NVIDIA_NOT_CONFIGURED',
+      503,
+      false,
+      'nvidia',
+    );
+  }
+
+  const baseUrl = getNvidiaBaseUrl();
+  const response = await CapacitorHttp.request({
+    url: `${baseUrl}${path}`,
+    method,
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    connectTimeout: 30000,
+    readTimeout: method === 'POST' ? 120000 : 30000,
+    responseType: 'json',
+  });
+
+  const data = response.data;
+  if (response.status < 200 || response.status >= 300) {
+    const detail =
+      typeof data === 'object' && data !== null
+        ? (data as Record<string, unknown>)
+        : undefined;
+    const nestedError =
+      detail?.error && typeof detail.error === 'object'
+        ? (detail.error as Record<string, unknown>)
+        : undefined;
+    const message =
+      (nestedError?.message as string | undefined) ??
+      (detail?.message as string | undefined) ??
+      `NVIDIA request failed: ${response.status}`;
+    const code =
+      (nestedError?.code as string | undefined) ??
+      (detail?.code as string | undefined) ??
+      'NVIDIA_REQUEST_FAILED';
+    throw new APIError(
+      message,
+      code,
+      response.status,
+      response.status >= 500,
+      'nvidia',
+    );
+  }
+
+  return data as T;
+}
+
+async function nvidiaConfiguredForClient(): Promise<boolean> {
+  return Capacitor.isNativePlatform() && await hasNvidiaApiKey();
+}
+
+function normalizeDirectModels(data: any): ModelCapabilityInfo[] {
+  const models = Array.isArray(data?.data) ? data.data : [];
+  const discoveredAt = new Date().toISOString();
+  return models.map((model: Record<string, unknown>) => {
+    const id = String(model.id ?? '').trim();
+    const rawCapabilities = Array.isArray(model.capabilities)
+      ? model.capabilities.filter((item): item is string => typeof item === 'string')
+      : [];
+    const capabilities = rawCapabilities.length > 0
+      ? rawCapabilities
+      : ['chat'];
+
+    return {
+      id,
+      name: typeof model.name === 'string' ? model.name : id,
+      provider: 'nvidia',
+      endpointFamily: 'chat',
+      inputModalities: capabilities.includes('vision') ? ['text', 'image'] : ['text'],
+      outputModalities: ['text'],
+      capabilities,
+      discoveredAt,
+      contextWindow:
+        typeof model.context_window === 'number' ? model.context_window : undefined,
+      maxOutputTokens:
+        typeof model.max_output_tokens === 'number' ? model.max_output_tokens : undefined,
+      capabilitySource: 'provider',
+    };
+  }).filter((model: ModelCapabilityInfo) => model.id.length > 0);
+}
+
 
 export const api = {
   /**
@@ -115,7 +216,15 @@ export const api = {
    * List available models from NVIDIA NIM
    */
   async listModels(): Promise<ModelCapabilityInfo[]> {
-    const response = await fetch(`${getGatewayUrl()}/api/models`);
+    if (await nvidiaConfiguredForClient()) {
+      const data = await nativeNvidiaRequest<{ data: unknown[] }>('/models', 'GET');
+      return transformModels(normalizeDirectModels(data));
+    }
+
+    const apiKey = await getNvidiaApiKey();
+    const response = await fetch(`${getGatewayUrl()}/api/models`, {
+      headers: apiKey ? { 'X-NVIDIA-API-Key': apiKey } : undefined,
+    });
     const data = await handleResponse<NIMModelListResponse>(response);
     return transformModels(data.data);
   },
@@ -124,10 +233,24 @@ export const api = {
    * Non-streaming chat completion
    */
   async chat(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
+    const payload = { ...request, stream: false };
+
+    if (await nvidiaConfiguredForClient()) {
+      return nativeNvidiaRequest<ChatCompletionResponse>(
+        '/chat/completions',
+        'POST',
+        payload,
+      );
+    }
+
+    const apiKey = await getNvidiaApiKey();
     const response = await fetch(`${getGatewayUrl()}/api/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...request, stream: false }),
+      headers: {
+        'Content-Type': 'application/json',
+        ...(apiKey ? { 'X-NVIDIA-API-Key': apiKey } : {}),
+      },
+      body: JSON.stringify(payload),
     });
     return handleResponse<ChatCompletionResponse>(response);
   },
@@ -139,9 +262,40 @@ export const api = {
     request: ChatCompletionRequest,
     signal?: AbortSignal,
   ): AsyncGenerator<ChatCompletionChunk, void, unknown> {
+    if (await nvidiaConfiguredForClient()) {
+      const response = await nativeNvidiaRequest<ChatCompletionResponse>(
+        '/chat/completions',
+        'POST',
+        { ...request, stream: false },
+      );
+      if (signal?.aborted) return;
+      const choice = response.choices?.[0];
+      yield {
+        id: response.id,
+        object: 'chat.completion.chunk',
+        created: response.created,
+        model: response.model,
+        choices: [{
+          index: 0,
+          delta: {
+            role: 'assistant',
+            content: typeof choice?.message?.content === 'string'
+              ? choice.message.content
+              : '',
+          },
+          finish_reason: choice?.finish_reason ?? 'stop',
+        }],
+      };
+      return;
+    }
+
+    const apiKey = await getNvidiaApiKey();
     const response = await fetch(`${getGatewayUrl()}/api/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(apiKey ? { 'X-NVIDIA-API-Key': apiKey } : {}),
+      },
       body: JSON.stringify({ ...request, stream: true }),
       signal,
     });
@@ -222,9 +376,13 @@ export const api = {
    * Run the gateway-owned model/MCP loop without streaming.
    */
   async agent(request: AgentRunRequest): Promise<AgentRunResponse> {
+    const apiKey = await getNvidiaApiKey();
     const response = await fetch(`${getGatewayUrl()}/api/agent`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(apiKey ? { 'X-NVIDIA-API-Key': apiKey } : {}),
+      },
       body: JSON.stringify({ ...request, stream: false }),
     });
     return handleResponse<AgentRunResponse>(response);
@@ -239,9 +397,13 @@ export const api = {
     request: AgentRunRequest,
     signal?: AbortSignal,
   ): AsyncGenerator<AgentStreamEvent, void, unknown> {
+    const apiKey = await getNvidiaApiKey();
     const response = await fetch(`${getGatewayUrl()}/api/agent`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(apiKey ? { 'X-NVIDIA-API-Key': apiKey } : {}),
+      },
       body: JSON.stringify({ ...request, stream: true }),
       signal,
     });
