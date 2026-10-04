@@ -233,7 +233,7 @@ async def chat(
                 media_type="text/event-stream",
                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
             )
-        return await nim.chat(payload)
+        return await nim.chat(payload, api_key=nvidia_api_key)
     except RuntimeError as exc:
         raise HTTPException(
             status_code=503,
