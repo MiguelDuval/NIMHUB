@@ -68,20 +68,24 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return data as T;
 }
 
+async healthAt(gatewayUrl: string): Promise<HealthResponse> {
+  const response = await fetch(`${normalizeGatewayUrl(gatewayUrl)}/api/health`);
+  return handleResponse<HealthResponse>(response);
+}
+
 export const api = {
   /**
    * Health check endpoint
    */
   async health(): Promise<HealthResponse> {
-    return this.healthAt(getGatewayUrl());
+    return healthAt(getGatewayUrl());
   },
 
   /**
    * Probe an explicit gateway URL without changing client configuration.
    */
   async healthAt(gatewayUrl: string): Promise<HealthResponse> {
-    const response = await fetch(`${normalizeGatewayUrl(gatewayUrl)}/api/health`);
-    return handleResponse<HealthResponse>(response);
+    return healthAt(gatewayUrl);
   },
 
   /**
