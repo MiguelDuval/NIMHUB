@@ -132,6 +132,12 @@ export default function App() {
       setStreamingContent('');
       setRetryCount(0);
     },
+    onAbort: (assistantMessageId) => {
+      if (assistantMessageId) {
+        updateMessage(assistantMessageId, { content: 'Generation cancelled.' });
+      }
+      setStreamingContent('');
+    },
   });
 
   const persistAgentMessages = useCallback(
