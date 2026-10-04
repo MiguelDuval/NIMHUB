@@ -20,3 +20,6 @@ Long-lived NVIDIA/GitHub credentials are never shipped inside the APK.
 
 ## Start here
 Read AGENTS.md, CLINE.md, docs/MASTER-PROMPT.md, docs/MASTER-SPEC.md, docs/BUILD.md, docs/GITHUB-SETUP.md and EGIT.md.
+## Phone-first runtime
+
+Install the APK, open **Settings**, enter the NVIDIA API key from Build.NVIDIA.com, and press **Test & save NVIDIA key**. Core model discovery and Chat do not require a GitHub checkout, local repository, or running gateway. The optional gateway is used for Agent/MCP/GitHub and server-side capabilities.
