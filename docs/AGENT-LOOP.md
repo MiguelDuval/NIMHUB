@@ -22,9 +22,10 @@ Ask only for missing credentials, destructive external actions or genuinely unre
 4. Enforce gateway policy before execution. Unknown/non-read-only behavior is never silently trusted.
 5. Write operations require an exact approval grant; destructive operations also require the server permission level to explicitly expose them.
 6. Execute multiple calls from one model turn without short-circuiting the conversation on a single tool error.
-7. Append each tool result/error as a normal `tool` message and give the model another turn.
+7. Append each tool result/error as a normal "tool" message and give the model another turn.
 8. Stop on a normal assistant response, an approval request, or the bounded maximum turn count.
 9. Streaming emits content/tool/approval events over SSE while preserving the same state machine.
+10. Approval prompts include the original model tool_call_id. If the user declines, the client records a matching "tool" message with an explicit denial instead of leaving an assistant tool call without a result.
 
 Approval grants contain a short-lived, gateway-issued opaque token plus the SHA-256 hash of canonical JSON arguments. The gateway binds the token to the exact tool and consumes it on execution, so the client cannot mint an approval from a hash alone.
 
