@@ -40,6 +40,7 @@ export default function App() {
     updateConversation,
     addMessage,
     updateLastMessage,
+    updateMessage,
     clearError: clearConvError,
   } = useConversations();
 
@@ -79,8 +80,8 @@ export default function App() {
     onChunk: (content, assistantMessageId) => {
       setStreamingContent(content);
       if (currentConversation && assistantMessageId) {
-        // Update the specific assistant message by ID
-        storage.updateMessage(assistantMessageId, { content });
+        // Update the specific assistant message by ID - syncs both IndexedDB and React state
+        updateMessage(assistantMessageId, { content });
       }
     },
     onComplete: (response, assistantMessageId) => {
@@ -93,7 +94,7 @@ export default function App() {
     onError: (err, assistantMessageId) => {
       if (currentConversation && assistantMessageId) {
         // Update the specific assistant message with error
-        storage.updateMessage(assistantMessageId, { content: 'Error: ' + err.message });
+        updateMessage(assistantMessageId, { content: 'Error: ' + err.message });
       }
       setStreamingContent('');
       setRetryCount(0);
@@ -146,12 +147,12 @@ export default function App() {
   );
 
   const handleConversationSelect = useCallback(
-    (conversationId: string) => {
-      selectConversation(conversationId);
+    async (conversationId: string) => {
+      const conversation = await selectConversation(conversationId);
       setStreamingContent('');
-      // Sync model with conversation
-      if (currentConversation) {
-        setModelFromConversation(currentConversation.modelId);
+      // Sync model with conversation (use the returned conversation, not stale state)
+      if (conversation) {
+        setModelFromConversation(conversation.modelId);
       }
     },
     [selectConversation, setModelFromConversation]

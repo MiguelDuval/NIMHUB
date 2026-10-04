@@ -52,8 +52,10 @@ export function useConversations() {
         setCurrentConversation(conversation);
         setMessages(msgs);
       }
+      return conversation;
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to load conversation'));
+      return null;
     }
   }, []);
 
@@ -130,6 +132,17 @@ export function useConversations() {
     }
   }, []);
 
+  const updateMessage = useCallback(async (messageId: string, updates: Partial<Pick<StoredMessage, 'content' | 'finishReason'>>) => {
+    try {
+      await storage.updateMessage(messageId, updates);
+      setMessages((prev) =>
+        prev.map((msg) => (msg.id === messageId ? { ...msg, ...updates } : msg))
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Failed to update message'));
+    }
+  }, []);
+
   const clearError = useCallback(() => setError(null), []);
 
   return {
@@ -145,6 +158,7 @@ export function useConversations() {
     updateConversation,
     addMessage,
     updateLastMessage,
+    updateMessage,
     clearError,
   };
 }

@@ -44,6 +44,8 @@ export function useChat({
   const isMountedRef = useRef(true);
   // Store the last sent messages for retry
   const lastSentMessagesRef = useRef<ChatMessage[]>(initialMessages);
+  // Store the assistant message ID for retry
+  const assistantMessageIdRef = useRef<string | undefined>(undefined);
   // Use refs for callbacks to avoid re-creating send/retry
   const onChunkRef = useRef(onChunk);
   const onCompleteRef = useRef(onComplete);
@@ -88,6 +90,8 @@ export function useChat({
 
       // Store messages for potential retry
       lastSentMessagesRef.current = msgs;
+      // Store assistant message ID for retry
+      assistantMessageIdRef.current = assistantMessageId;
 
       setStatus(stream ? 'streaming' : 'pending');
       setError(null);
@@ -187,8 +191,8 @@ export function useChat({
 
     if (!isMountedRef.current) return;
 
-    // Retry with the last sent messages
-    await send(lastSentMessagesRef.current, { stream: true });
+    // Retry with the last sent messages AND the same assistant message ID
+    await send(lastSentMessagesRef.current, { stream: true, assistantMessageId: assistantMessageIdRef.current });
   }, [error, send]);
 
   const isRetryable = error?.retryable ?? false;

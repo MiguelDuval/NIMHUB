@@ -29,14 +29,15 @@ class ModelCapability:
 
 # Known model metadata registry (verified capabilities)
 # Source: NVIDIA NIM documentation and API specifications
+# Only models with verified capabilities from official NVIDIA documentation are included
 KNOWN_MODELS: dict[str, dict] = {
-    "nvidia/nemotron-3-ultra": {
+    "nvidia/nemotron-3-ultra-550b-a55b": {
         "name": "Nemotron 3 Ultra",
         "endpoint_family": "chat",
         "input_modalities": ["text"],
         "output_modalities": ["text"],
         "capabilities": ["chat", "reasoning", "tool-calling"],
-        "context_window": 4096,  # Corrected: Nemotron 3 Ultra has 4096 context window
+        "context_window": 262144,  # NVIDIA docs: native 262,144, configurable up to 1,048,576
         "max_output_tokens": 4096,
     },
     "nvidia/nemotron-4-340b": {

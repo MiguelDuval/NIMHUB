@@ -2,7 +2,7 @@
  * Models Hook - Model Discovery and Capability Management
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../services/api';
 import type { ModelCapabilityInfo, ModelCapability } from '../types';
 
@@ -11,6 +11,7 @@ export function useModels() {
   const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const hasLoadedRef = useRef(false);
 
   const loadModels = useCallback(async () => {
     try {
@@ -18,10 +19,13 @@ export function useModels() {
       setError(null);
       const modelList = await api.listModels();
       setModels(modelList);
-      // Auto-select first chat-capable model
-      const chatModel = modelList.find((m) => m.capabilities.includes('chat'));
-      if (chatModel && !selectedModelId) {
-        setSelectedModelId(chatModel.id);
+      // Auto-select first chat-capable model ONLY on initial load
+      if (!hasLoadedRef.current) {
+        const chatModel = modelList.find((m) => m.capabilities.includes('chat'));
+        if (chatModel && !selectedModelId) {
+          setSelectedModelId(chatModel.id);
+        }
+        hasLoadedRef.current = true;
       }
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to load models'));
