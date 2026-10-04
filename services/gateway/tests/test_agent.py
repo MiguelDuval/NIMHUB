@@ -4,8 +4,15 @@ from collections.abc import AsyncIterator
 import pytest
 
 from nimhub_gateway.agent import AgentRunRequest, AgentRuntime
-from nimhub_gateway.mcp import MCPApprovalGrant, MCPRegistry, MCPServerConfig, canonical_arguments_sha256
-from tests.test_mcp import SERVER
+from nimhub_gateway.mcp import (
+    MCPApprovalGrant,
+    MCPRegistry,
+    MCPServerConfig,
+    MCPToolDefinition,
+    canonical_arguments_sha256,
+)
+
+SERVER = Path(__file__).with_name("deterministic_mcp_server.py")
 
 
 def registry(permission: str = "read") -> MCPRegistry:
