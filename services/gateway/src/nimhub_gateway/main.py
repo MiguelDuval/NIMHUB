@@ -229,7 +229,7 @@ async def chat(
     try:
         if request.stream:
             return StreamingResponse(
-                nim.chat_stream(payload),
+                nim.chat_stream(payload, api_key=nvidia_api_key),
                 media_type="text/event-stream",
                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
             )
