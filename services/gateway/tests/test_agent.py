@@ -44,6 +44,31 @@ def tool_call(model_name: str, call_id: str, value: str) -> dict:
     }
 
 
+class StreamingErrorNIM:
+    def __init__(self) -> None:
+        self.payloads: list[dict] = []
+
+    async def chat_stream(self, payload: dict) -> AsyncIterator[bytes]:
+        self.payloads.append(copy.deepcopy(payload))
+        if len(self.payloads) == 1:
+            yield (
+                b'data: {"id":"chat-1","object":"chat.completion.chunk","created":1,'
+                b'"model":"test-model","choices":[{"index":0,"delta":{"role":"assistant",'
+                b'"tool_calls":[{"index":0,"id":"call-1","type":"function","function":'
+                b'{"name":"does-not-exist","arguments":"{\\"value\\":\\"x\\"}"}}]},'
+                b'"finish_reason":"tool_calls"}]}\n\n'
+            )
+            yield b'data: [DONE]\n\n'
+            return
+
+        yield (
+            b'data: {"id":"chat-2","object":"chat.completion.chunk","created":2,'
+            b'"model":"test-model","choices":[{"index":0,"delta":{"role":"assistant",'
+            b'"content":"recovered"},"finish_reason":"stop"}]}\n\n'
+        )
+        yield b'data: [DONE]\n\n'
+
+
 class FakeNIM:
     def __init__(self, responses: list[dict]):
         self.responses = list(responses)
@@ -336,6 +361,33 @@ async def test_streaming_approval_executes_original_call_before_model_resume() -
     assert events[0]["tool"] == protected.qualified_name
     assert [event["type"] for event in events[1:]] == ["content_delta", "content_delta", "done"]
     assert "".join(event.get("text", "") for event in events if event["type"] == "content_delta") == "hello"
+
+
+@pytest.mark.asyncio
+async def test_streaming_tool_error_is_persisted_for_model_recovery() -> None:
+    reg = registry()
+    nim = StreamingErrorNIM()
+
+    events = [
+        event
+        async for event in AgentRuntime(nim, reg).stream(
+            AgentRunRequest(
+                model="test-model",
+                messages=[{"role": "user", "content": "recover"}],
+                stream=True,
+            )
+        )
+    ]
+
+    assert any(event["type"] == "tool_error" for event in events)
+    assert [event["type"] for event in events[-2:]] == ["content_delta", "done"]
+    assert "recovered" in "".join(
+        event.get("text", "") for event in events if event["type"] == "content_delta"
+    )
+    assert len(nim.payloads) == 2
+    second_messages = nim.payloads[1]["messages"]
+    assert second_messages[-1]["role"] == "tool"
+    assert '"ok": false' in second_messages[-1]["content"]
 
 
 @pytest.mark.asyncio
