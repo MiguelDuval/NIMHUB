@@ -72,7 +72,10 @@ export default function App() {
     status: gatewayStatus,
     error: gatewayError,
     nvidiaConfigured,
+    nvidiaBaseUrl,
+    adminConfigured,
     updateUrl: updateGatewayUrl,
+    saveNvidiaSettings,
   } = useGatewayStatus();
 
   const [inputMessage, setInputMessage] = useState('');
@@ -273,8 +276,8 @@ export default function App() {
   ]);
 
   const handleNewConversation = useCallback(async () => {
-    if (!selectedModelId || effectiveBusy) return;
-    const conversation = await createConversation(selectedModelId);
+    if (effectiveBusy) return;
+    const conversation = await createConversation(selectedModelId || '');
     await selectConversation(conversation.id);
     setStreamingContent('');
     resetAgent();
@@ -423,6 +426,8 @@ export default function App() {
       ? 'NVIDIA key missing'
       : modelsLoading
       ? 'Loading models…'
+      : !selectedModelId
+      ? 'Choose a model…'
       : agentActiveLabel ??
         (status === 'streaming'
           ? 'Streaming…'
@@ -484,6 +489,8 @@ export default function App() {
             url={gatewayUrl}
             status={gatewayStatus}
             nvidiaConfigured={nvidiaConfigured}
+            nvidiaBaseUrl={nvidiaBaseUrl}
+            adminConfigured={adminConfigured}
             error={gatewayError}
             onSave={async (nextUrl) => {
               await updateGatewayUrl(nextUrl);
@@ -491,6 +498,12 @@ export default function App() {
               await refreshMCP();
             }}
             onTest={(nextUrl) => api.healthAt(nextUrl)}
+            onSaveNvidia={async (settingsInput, adminToken) => {
+              const result = await saveNvidiaSettings(settingsInput, adminToken);
+              await refreshModels();
+              await refreshMCP();
+              return result;
+            }}
           />
           <div className={"status-indicator " + statusClass}>
             <span className="status-dot"></span>
@@ -664,13 +677,21 @@ export default function App() {
               attachments={attachments}
               onRemoveAttachment={removeImage}
               disabled={
-                !selectedModelId ||
                 (agentMode && !canUseAgent) ||
                 effectiveBusy
               }
               streaming={status === 'streaming' || agentStatus === 'running'}
               canSend={canSend}
               visionEnabled={selectedModel?.capabilities.includes('vision') ?? false}
+              placeholder={
+                gatewayStatus !== 'connected'
+                  ? 'Type here — configure Gateway to send…'
+                  : nvidiaConfigured !== true
+                  ? 'Type here — connect NVIDIA to send…'
+                  : !selectedModelId
+                  ? 'Type here — choose a model to send…'
+                  : 'Ask NIM Hub anything…'
+              }
             />
           </div>
         </div>
