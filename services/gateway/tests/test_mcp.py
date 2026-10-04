@@ -124,8 +124,20 @@ async def test_destructive_policy_requires_exact_argument_approval() -> None:
         await reg.authorize_tool_call(protected, arguments, [])
 
     digest = canonical_arguments_sha256(arguments)
+
+    with pytest.raises(MCPApprovalRequired) as exc_info:
+        await reg.authorize_tool_call(protected, arguments, [])
+    approval_token = exc_info.value.approval_token
+
+    forged = MCPApprovalGrant(
+        approval_token="x" * 32,
+        arguments_sha256=digest,
+    )
+    with pytest.raises(MCPApprovalRequired):
+        await reg.authorize_tool_call(protected, arguments, [forged])
+
     grant = MCPApprovalGrant(
-        tool=protected.qualified_name,
+        approval_token=approval_token,
         arguments_sha256=digest,
     )
     assert await reg.authorize_tool_call(protected, arguments, [grant]) == digest
@@ -139,6 +151,15 @@ async def test_destructive_policy_requires_exact_argument_approval() -> None:
     )
     assert result.is_error is False
     assert result.content[0]["text"] == "protected:hello"
+
+    with pytest.raises(MCPApprovalRequired):
+        await reg.call_tool(
+            MCPToolCallRequest(
+                tool=protected.qualified_name,
+                arguments=arguments,
+                approval_grants=[grant],
+            )
+        )
 
     with pytest.raises(MCPApprovalRequired):
         await reg.authorize_tool_call(
