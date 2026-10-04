@@ -97,6 +97,33 @@ describe('MCP gateway API', () => {
     );
   });
 
+  it('parses streamed chat SSE events', async () => {
+    const body = [
+      'data: {"id":"chat-1","object":"chat.completion.chunk","choices":[{"delta":{"content":"hel"}}]}\n\n',
+      'data: {"id":"chat-1","object":"chat.completion.chunk","choices":[{"delta":{"content":"lo"},"finish_reason":"stop"}]}\n\n',
+    ].join('');
+
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const chunks = [];
+    for await (const chunk of api.chatStream({
+      model: 'test-model',
+      messages: [{ role: 'user', content: 'hello' }],
+    })) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks).toHaveLength(2);
+    expect(chunks[0].choices[0].delta.content).toBe('hel');
+    expect(chunks[1].choices[0].delta.content).toBe('lo');
+  });
+
   it('parses streamed agent SSE events', async () => {
     const body = [
       'data: {"type":"content_delta","text":"hello","turn":1}\n\n',
