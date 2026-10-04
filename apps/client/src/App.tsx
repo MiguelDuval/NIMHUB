@@ -71,12 +71,7 @@ export default function App() {
   const {
     url: gatewayUrl,
     status: gatewayStatus,
-    error: gatewayError,
-    nvidiaConfigured: gatewayNvidiaConfigured,
-    nvidiaBaseUrl: gatewayNvidiaBaseUrl,
-    adminConfigured: gatewayAdminConfigured,
     updateUrl: updateGatewayUrl,
-    saveNvidiaSettings,
   } = useGatewayStatus();
 
   const {
@@ -425,19 +420,15 @@ export default function App() {
       : null;
 
   const workstationStatusLabel =
-    gatewayStatus === 'checking'
-      ? 'Connecting…'
-      : gatewayStatus === 'error'
-      ? 'Gateway offline'
-      : nvidiaConfigured === false
-      ? 'NVIDIA key missing'
+    nvidiaConfigured === false
+      ? 'NVIDIA setup required'
       : modelsLoading
       ? 'Loading models…'
       : !selectedModelId
       ? 'Choose a model…'
       : agentActiveLabel ??
         (status === 'streaming'
-          ? 'Streaming…'
+          ? 'Generating…'
           : status === 'pending'
           ? 'Sending…'
           : status === 'error'
@@ -445,13 +436,12 @@ export default function App() {
           : 'Ready');
 
   const statusClass =
-    gatewayStatus === 'error' || status === 'error' || agentStatus === 'error'
+    status === 'error' || agentStatus === 'error'
       ? 'error'
-      : gatewayStatus === 'checking' || modelsLoading ||
-        status === 'streaming' || status === 'pending' ||
+      : modelsLoading || status === 'streaming' || status === 'pending' ||
         agentStatus === 'running' || agentStatus === 'approval_required'
       ? 'pending'
-      : 'success';
+      : nvidiaConfigured ? 'success' : 'error';
 
   return (
     <main className="shell">
