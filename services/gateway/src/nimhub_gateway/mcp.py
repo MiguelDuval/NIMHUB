@@ -384,7 +384,10 @@ class MCPRegistry:
                 yield client
             return
 
-        async with httpx2.AsyncClient(headers=headers) as http_client:
+        async with httpx2.AsyncClient(
+            headers=headers,
+            timeout=httpx2.Timeout(30.0, read=300.0),
+        ) as http_client:
             transport = streamable_http_client(
                 server.url,
                 http_client=http_client,
