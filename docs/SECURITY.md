@@ -32,4 +32,4 @@ MCP server credentials are resolved only from gateway environment-variable refer
 
 The gateway treats server permission as a hard upper bound: `read` blocks non-read-only tools, `write` blocks destructive tools, and `destructive` is required to expose destructive tools. Approval is still required for write/destructive/unknown behavior.
 
-Approval is bound to the exact tool identifier and SHA-256 of canonical JSON arguments. A modified payload cannot reuse the earlier approval.
+Approval is bound to the exact tool identifier and SHA-256 of canonical JSON arguments. A modified payload cannot reuse the earlier approval.\n## Personal LAN gateway networking\n\nThe Android APK may connect to a user-configured HTTP gateway on a trusted personal LAN. This requires Capacitor cleartext/mixed-content support in the packaged app. For deployments beyond a trusted personal LAN, use an HTTPS gateway and avoid relying on cleartext transport. The gateway URL itself is client configuration, not a provider credential.\n
