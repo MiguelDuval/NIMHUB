@@ -92,6 +92,7 @@ export interface HealthResponse {
   ok: boolean;
   service: string;
   nvidia_configured: boolean;
+  mcp_servers_configured?: number;
 }
 
 // ============================================================================
