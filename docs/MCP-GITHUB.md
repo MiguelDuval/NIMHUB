@@ -101,6 +101,7 @@ than hard-code a tool catalog.
 - `POST /api/mcp/call` — one validated MCP call through the permission boundary.
 - `POST /api/agent` — generic model/tool loop; use `stream: true` for SSE.
 
-Approval grants are bound to the canonical JSON argument hash. Changing even
-one argument invalidates the grant, so the client cannot silently approve one
-operation and execute another.
+Approval grants carry a short-lived, gateway-issued opaque token bound to the
+exact tool and canonical JSON argument hash. The gateway consumes the token at
+execution time. Changing even one argument invalidates the grant, and the
+client cannot mint an approval from the hash alone.
