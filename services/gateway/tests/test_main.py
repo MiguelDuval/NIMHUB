@@ -36,8 +36,7 @@ def test_agent_requires_gateway_side_nvidia_configuration() -> None:
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "NVIDIA_NOT_CONFIGURED"
 
-@pytest.mark.asyncio
-async def test_agent_stream_endpoint_emits_real_sse_frame_separators(monkeypatch) -> None:
+def test_agent_stream_endpoint_emits_real_sse_frame_separators(monkeypatch) -> None:
     monkeypatch.setattr(settings, "nvidia_api_key", "test-key")
 
     async def fake_stream(_request):
