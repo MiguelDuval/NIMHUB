@@ -100,12 +100,6 @@ export default function App() {
       element.scrollHeight - element.scrollTop - element.clientHeight < 120;
   }, []);
 
-  useEffect(() => {
-    const element = messagesAreaRef.current;
-    if (!element || !shouldAutoScrollRef.current) return;
-    element.scrollTop = element.scrollHeight;
-  }, [chatMessages.length, streamingContent, agentStreamingText, agentApprovals.length]);
-
   const chatMessages = useMemo(
     (): ChatMessage[] => storedMessages.map(storedToChatMessage),
     [storedMessages],
@@ -175,6 +169,12 @@ export default function App() {
     modelId: selectedModelId,
     onMessages: persistAgentMessages,
   });
+
+  useEffect(() => {
+    const element = messagesAreaRef.current;
+    if (!element || !shouldAutoScrollRef.current) return;
+    element.scrollTop = element.scrollHeight;
+  }, [chatMessages.length, streamingContent, agentStreamingText, agentApprovals.length]);
 
   const canUseAgent = selectedModel?.capabilities.includes('tool-calling') ?? false;
   const {
