@@ -23,8 +23,8 @@ Bind local development to localhost by default. LAN exposure is opt-in.
 ## Dependencies
 Use lockfiles and automated dependency update checks. Major NIM/MCP SDK upgrades require verification because their APIs can change materially.
 
-## Android later
-Use Android Keystore/secure storage when credentials must exist on-device. Never package `.env` into an APK.
+## Android credentials
+The Android client stores the NVIDIA API key only in a Keystore-backed encrypted app-private store. The key is never placed in JavaScript localStorage, source files, APK assets or GitHub Actions secrets for normal use. Native HTTP is used for hosted NIM requests to avoid browser CORS limitations.
 
 ## MCP boundary details
 
@@ -36,8 +36,4 @@ Approval is bound to the exact tool identifier and SHA-256 of canonical JSON arg
 
 ## NVIDIA client configuration
 
-The Android client never stores the NVIDIA API key in localStorage. The key is sent only to the gateway through the authenticated provider-setup endpoint. The gateway verifies the credentials against the configured NVIDIA `/models` endpoint before saving them.
-
-Configure a separate `NIM_HUB_ADMIN_TOKEN` on the gateway before using the Android provider setup. The APK keeps this management token in memory only for the current session.
-
-NVIDIA settings are persisted atomically to `NIM_HUB_ENV_FILE` with file mode `0600`. The settings endpoint never returns the NVIDIA API key.
+For optional gateway runtime requests, the Android client may send the device-held NVIDIA key in the `X-NVIDIA-API-Key` request header. The gateway uses it transiently and must never persist or log that header. Persistent gateway-side credentials remain supported for server-only deployments, but the Android app no longer requires `NIM_HUB_ADMIN_TOKEN` for ordinary runtime use.
