@@ -31,7 +31,8 @@ function VisualProfileEditor({ kind, profile, onReload }: Props) {
     if (!next) return;
     const previous = getMediaModelDefinition(profile.model);
     const baseWasKnownDefault = !profile.baseUrl || profile.baseUrl === previous?.defaultBaseUrl;
-    const nextBase = next.defaultBaseUrl || (baseWasKnownDefault ? '' : profile.baseUrl);
+    const changingSelfHostedModel = next.availability === 'self-hosted' && next.id !== previous?.id;
+    const nextBase = next.defaultBaseUrl || (changingSelfHostedModel ? '' : (baseWasKnownDefault ? '' : profile.baseUrl));
     setModel(next.id); setBaseUrl(nextBase); setError(null);
     try {
       await setMediaProviderModel(kind, next.id, nextBase);
