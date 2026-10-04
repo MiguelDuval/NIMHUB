@@ -147,7 +147,8 @@ export default function App() {
   const effectiveBusy =
     status === 'streaming' ||
     status === 'pending' ||
-    agentStatus === 'running';
+    agentStatus === 'running' ||
+    agentStatus === 'approval_required';
 
   const agentDisplayError = agentError
     ? [agentError.message, agentError.code].filter(Boolean).join(' · ')
