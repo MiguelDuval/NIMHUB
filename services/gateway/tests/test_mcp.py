@@ -1,3 +1,4 @@
+import asyncio
 import json
 import sys
 from pathlib import Path
@@ -168,6 +169,46 @@ async def test_destructive_policy_requires_exact_argument_approval() -> None:
             [grant],
         )
 
+
+@pytest.mark.asyncio
+async def test_approval_token_cannot_be_consumed_twice_concurrently() -> None:
+    reg = registry(permission="destructive")
+    protected = (await discovered(reg))["protected_write"]
+    arguments = {"value": "concurrent"}
+    digest = canonical_arguments_sha256(arguments)
+
+    with pytest.raises(MCPApprovalRequired) as exc_info:
+        await reg.authorize_tool_call(protected, arguments, [])
+
+    grant = MCPApprovalGrant(
+        approval_token=exc_info.value.approval_token,
+        arguments_sha256=digest,
+    )
+
+    results = await asyncio.gather(
+        reg.call_tool(
+            MCPToolCallRequest(
+                tool=protected.qualified_name,
+                arguments=arguments,
+                approval_grants=[grant],
+            )
+        ),
+        reg.call_tool(
+            MCPToolCallRequest(
+                tool=protected.qualified_name,
+                arguments=arguments,
+                approval_grants=[grant],
+            )
+        ),
+        return_exceptions=True,
+    )
+
+    successes = [result for result in results if not isinstance(result, Exception)]
+    failures = [result for result in results if isinstance(result, Exception)]
+
+    assert len(successes) == 1
+    assert len(failures) == 1
+    assert isinstance(failures[0], (MCPApprovalRequired, MCPPolicyError))
 
 @pytest.mark.asyncio
 async def test_client_server_summary_contains_no_credentials() -> None:
