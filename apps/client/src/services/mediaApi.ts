@@ -11,6 +11,7 @@ import type {
   NativeMultipartResponse,
 } from '../types';
 import { getMediaProviderConfig, type MediaProviderKind } from './mediaConfig';
+import { getMediaModelDefinition } from './mediaCatalog';
 import { APIError } from './api';
 import { normalizeNvidiaApiKey } from './nvidiaConfig';
 
@@ -146,6 +147,33 @@ function assertSuccess(response: NativeMultipartResponse, operation: string): vo
 export async function generateImage(request: ImageGenerationRequest): Promise<ImageGenerationResponse> {
   assertNative();
   const profile = await requireProfile('image');
+  const model = getMediaModelDefinition(profile.model || request.model);
+  if (!model?.functions.includes('image-generation')) {
+    throw new APIError('Selected image model does not support image generation.', 'MEDIA_MODEL_UNSUPPORTED', 400, false, 'nvidia');
+  }
+
+  if (model.transport === 'cosmos3') {
+    const resolution = request.size === '832x480' ? '480_16_9'
+      : request.size === '1280x720' ? '720_16_9'
+      : '720_1_1';
+    const payload = await nativeJsonPost<{ b64_image?: string }>(
+      joinEndpoint(profile.baseUrl, model.endpoint),
+      profile.apiKey!,
+      {
+        model_mode: 'text2image',
+        prompt: request.prompt,
+        resolution,
+        num_frames: 1,
+        num_inference_steps: 50,
+      },
+      180000,
+    );
+    if (!payload.b64_image) {
+      throw new APIError('Cosmos3 returned no image payload.', 'MEDIA_EMPTY_RESULT', 502, false, 'nvidia');
+    }
+    return { created: Math.floor(Date.now() / 1000), data: [{ b64_json: payload.b64_image }] };
+  }
+
   return nativeJsonPost<ImageGenerationResponse>(
     joinEndpoint(profile.baseUrl, '/images/generations'),
     profile.apiKey!,
@@ -242,6 +270,35 @@ export async function synthesizeSpeech(
 export async function generateVideo(request: VideoGenerationRequest): Promise<VideoGenerationResponse> {
   assertNative();
   const profile = await requireProfile('video');
+  const model = getMediaModelDefinition(profile.model || request.model);
+  if (!model?.functions.includes('video-generation')) {
+    throw new APIError('Selected video model does not support video generation.', 'MEDIA_MODEL_UNSUPPORTED', 400, false, 'nvidia');
+  }
+
+  if (model.transport === 'cosmos3') {
+    const seconds = request.seconds ?? 4;
+    const modelMode = request.input_reference ? 'image2video' : 'text2video';
+    const resolution = request.size === '1280x720' ? '720_16_9' : '480_16_9';
+    const payload = await nativeJsonPost<{ b64_video?: string }>(
+      joinEndpoint(profile.baseUrl, model.endpoint),
+      profile.apiKey!,
+      {
+        model_mode: modelMode,
+        prompt: request.prompt,
+        resolution,
+        num_frames: Math.max(25, Math.min(197, Math.round(seconds * 24))),
+        num_inference_steps: 35,
+        fps: 24,
+        ...(request.input_reference ? { input_reference: request.input_reference } : {}),
+      },
+      300000,
+    );
+    if (!payload.b64_video) {
+      throw new APIError('Cosmos3 returned no video payload.', 'MEDIA_EMPTY_RESULT', 502, false, 'nvidia');
+    }
+    return { created: Math.floor(Date.now() / 1000), status: 'completed', data: { b64_json: payload.b64_video } };
+  }
+
   return nativeJsonPost<VideoGenerationResponse>(
     joinEndpoint(profile.baseUrl, '/videos/generations'),
     profile.apiKey!,
