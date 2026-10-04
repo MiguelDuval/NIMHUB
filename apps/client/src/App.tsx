@@ -6,8 +6,7 @@ import { useAgent } from './hooks/useAgent';
 import { useAttachments } from './hooks/useAttachments';
 import { useGlobalEvents } from './hooks/useGlobalEvents';
 import { storage } from './services/storage';
-import type { ChatMessage, StoredMessage, ModelCapabilityInfo } from './types';
-import type { ImageAttachment } from './types';
+import type { ChatMessage, StoredMessage } from './types';
 import { Message } from './components/Message';
 import { ModelSelector } from './components/ModelSelector';
 import { ConversationList } from './components/ConversationList';
@@ -41,7 +40,6 @@ export default function App() {
     deleteConversation,
     updateConversation,
     addMessage,
-    updateLastMessage,
     updateMessage,
     clearError: clearConvError,
   } = useConversations();
@@ -58,7 +56,6 @@ export default function App() {
   const {
     attachments,
     error: attachmentError,
-    addImage,
     removeImage,
     clearAttachments,
     getAttachmentContent,
@@ -74,29 +71,37 @@ export default function App() {
   const [retryCount, setRetryCount] = useState(0);
   const [agentMode, setAgentMode] = useState(false);
 
-  const selectedModel = useMemo(() => models.find((m) => m.id === selectedModelId), [models, selectedModelId]);
-  const chatMessages = useMemo((): ChatMessage[] => storedMessages.map(storedToChatMessage), [storedMessages]);
+  const selectedModel = useMemo(
+    () => models.find((m) => m.id === selectedModelId),
+    [models, selectedModelId],
+  );
+  const chatMessages = useMemo(
+    (): ChatMessage[] => storedMessages.map(storedToChatMessage),
+    [storedMessages],
+  );
 
-  const { status, error: chatError, abort, retry, send, isRetryable } = useChat({
+  const {
+    status,
+    error: chatError,
+    abort,
+    retry,
+    send,
+    isRetryable,
+  } = useChat({
     modelId: selectedModelId,
     messages: chatMessages,
     onChunk: (content, assistantMessageId) => {
       setStreamingContent(content);
       if (currentConversation && assistantMessageId) {
-        // Update the specific assistant message by ID - syncs both IndexedDB and React state
         updateMessage(assistantMessageId, { content });
       }
     },
-    onComplete: (response, assistantMessageId) => {
-      const content = response.choices[0]?.message?.content ?? '';
-      // Message already persisted via onChunk -> updateMessage
-      // No need to add again
+    onComplete: () => {
       setStreamingContent('');
       setRetryCount(0);
     },
     onError: (err, assistantMessageId) => {
       if (currentConversation && assistantMessageId) {
-        // Update the specific assistant message with error
         updateMessage(assistantMessageId, { content: 'Error: ' + err.message });
       }
       setStreamingContent('');
@@ -105,7 +110,7 @@ export default function App() {
   });
 
   const persistAgentMessages = useCallback(
-    async (messagesToPersist: import('./types').ChatMessage[]) => {
+    async (messagesToPersist: ChatMessage[]) => {
       if (!currentConversation) return;
       for (const message of messagesToPersist) {
         await addMessage(
@@ -127,8 +132,10 @@ export default function App() {
     status: agentStatus,
     error: agentError,
     approvals: agentApprovals,
+    streamingText: agentStreamingText,
     run: runAgent,
     approve: approveAgent,
+    abort: abortAgent,
     reject: rejectAgent,
     reset: resetAgent,
   } = useAgent({
@@ -146,8 +153,6 @@ export default function App() {
     ? [agentError.message, agentError.code].filter(Boolean).join(' · ')
     : null;
 
-
-
   const handleSend = useCallback(async () => {
     const text = inputMessage.trim();
     if (!text && attachments.length === 0) return;
@@ -155,13 +160,21 @@ export default function App() {
     if (effectiveBusy) return;
     if (!currentConversation) return;
 
-    let content: string | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail?: 'auto' | 'high' | 'low' } }> = text;
+    let content: string | Array<
+      { type: 'text'; text: string } |
+      { type: 'image_url'; image_url: { url: string; detail?: 'auto' | 'high' | 'low' } }
+    > = text;
+
     if (attachments.length > 0) {
-      const attachmentContents = await Promise.all(attachments.map(att => getAttachmentContent(att)));
-      content = [...(text ? [{ type: 'text' as const, text }] : []), ...attachmentContents];
+      const attachmentContents = await Promise.all(
+        attachments.map((att) => getAttachmentContent(att)),
+      );
+      content = [
+        ...(text ? [{ type: 'text' as const, text }] : []),
+        ...attachmentContents,
+      ];
     }
 
-    // Persist user message
     await addMessage(currentConversation.id, 'user', content);
     const apiMessages = [...chatMessages, { role: 'user' as const, content }];
 
@@ -172,63 +185,88 @@ export default function App() {
       return;
     }
 
-    // Create assistant placeholder message BEFORE streaming starts
     const assistantMsg = await addMessage(currentConversation.id, 'assistant', '');
     const assistantMessageId = assistantMsg.id;
 
     setInputMessage('');
     clearAttachments();
-    
-    // Send with the assistant message ID for streaming updates
     await send(apiMessages, { stream: true, assistantMessageId });
-  }, [inputMessage, attachments, selectedModelId, effectiveBusy, currentConversation, chatMessages, addMessage, clearAttachments, send, getAttachmentContent, agentMode, runAgent]);
+  }, [
+    inputMessage,
+    attachments,
+    selectedModelId,
+    effectiveBusy,
+    currentConversation,
+    chatMessages,
+    addMessage,
+    clearAttachments,
+    send,
+    getAttachmentContent,
+    agentMode,
+    runAgent,
+  ]);
 
   const handleNewConversation = useCallback(async () => {
-    if (!selectedModelId) return;
+    if (!selectedModelId || effectiveBusy) return;
     const conversation = await createConversation(selectedModelId);
     await selectConversation(conversation.id);
     setStreamingContent('');
     resetAgent();
-  }, [selectedModelId, createConversation, selectConversation, resetAgent]);
+  }, [
+    selectedModelId,
+    effectiveBusy,
+    createConversation,
+    selectConversation,
+    resetAgent,
+  ]);
 
   const handleModelChange = useCallback(
     (modelId: string) => {
+      if (effectiveBusy) return;
       resetAgent();
       selectModel(modelId);
       if (currentConversation) {
         updateConversation(currentConversation.id, { modelId });
       }
     },
-    [selectModel, currentConversation, updateConversation, resetAgent]
+    [
+      selectModel,
+      currentConversation,
+      updateConversation,
+      resetAgent,
+      effectiveBusy,
+    ],
   );
 
   const handleAgentToggle = useCallback(() => {
+    if (effectiveBusy) return;
     if (agentMode) {
       setAgentMode(false);
       resetAgent();
       return;
     }
     setAgentMode(true);
-  }, [agentMode, resetAgent]);
+  }, [agentMode, effectiveBusy, resetAgent]);
 
   const handleConversationSelect = useCallback(
     async (conversationId: string) => {
+      if (effectiveBusy) return;
       const conversation = await selectConversation(conversationId);
       setStreamingContent('');
       resetAgent();
-      // Sync model with conversation (use the returned conversation, not stale state)
       if (conversation) {
         setModelFromConversation(conversation.modelId);
       }
     },
-    [selectConversation, setModelFromConversation, resetAgent]
+    [selectConversation, setModelFromConversation, resetAgent, effectiveBusy],
   );
 
   const handleDeleteConversation = useCallback(
     (conversationId: string) => {
+      if (effectiveBusy) return;
       deleteConversation(conversationId);
     },
-    [deleteConversation]
+    [deleteConversation, effectiveBusy],
   );
 
   const handleRetry = useCallback(() => {
@@ -237,11 +275,13 @@ export default function App() {
   }, [retry]);
 
   const handleAbort = useCallback(() => {
+    if (agentMode) {
+      abortAgent();
+      return;
+    }
     abort();
     setStreamingContent('');
-  }, [abort]);
-
-
+  }, [abort, abortAgent, agentMode]);
 
   const canSend = useMemo(
     () =>
@@ -285,6 +325,17 @@ export default function App() {
     );
   }
 
+  const agentActiveLabel =
+    agentStatus === 'running'
+      ? 'Agent running…'
+      : agentStatus === 'approval_required'
+      ? 'Approval required'
+      : agentStatus === 'cancelled'
+      ? 'Agent cancelled'
+      : agentStatus === 'error'
+      ? 'Agent error'
+      : null;
+
   return (
     <main className="shell">
       <header className="topbar">
@@ -309,28 +360,29 @@ export default function App() {
             models={models}
             selectedModelId={selectedModelId}
             onChange={handleModelChange}
-            disabled={modelsLoading || status === 'streaming'}
+            disabled={modelsLoading || effectiveBusy}
             showDetails={showModelDetails}
             onToggleDetails={() => setShowModelDetails(!showModelDetails)}
           />
         </div>
         <div className="topbar-right">
-          <div className={"status-indicator " + status}>
+          <div className={"status-indicator " + (agentStatus === 'error' ? 'error' : status)}>
             <span className="status-dot"></span>
             <span>
-              {status === 'streaming'
-                ? 'Streaming...'
-                : status === 'pending'
-                ? 'Sending...'
-                : status === 'error'
-                ? 'Error'
-                : 'Ready'}
+              {agentActiveLabel ??
+                (status === 'streaming'
+                  ? 'Streaming...'
+                  : status === 'pending'
+                  ? 'Sending...'
+                  : status === 'error'
+                  ? 'Error'
+                  : 'Ready')}
             </span>
           </div>
           <button
             className="icon-btn"
             onClick={handleNewConversation}
-            disabled={status === 'streaming'}
+            disabled={effectiveBusy}
             title="New Conversation"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -365,7 +417,12 @@ export default function App() {
           <aside className="sidebar">
             <div className="sidebar-header">
               <span className="sidebar-title">Conversations</span>
-              <button className="icon-btn" onClick={handleNewConversation} title="New Conversation">
+              <button
+                className="icon-btn"
+                onClick={handleNewConversation}
+                disabled={effectiveBusy}
+                title="New Conversation"
+              >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="12" y1="5" x2="12" y2="19"></line>
                   <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -396,18 +453,28 @@ export default function App() {
             )}
 
             <div className="messages-area" role="log" aria-live="polite">
-              {chatMessages.length === 0 && streamingContent === '' && (
-                <WelcomeMessage selectedModel={selectedModel} />
-              )}
+              {chatMessages.length === 0 &&
+                streamingContent === '' &&
+                agentStreamingText === '' && (
+                  <WelcomeMessage selectedModel={selectedModel} />
+                )}
 
               {chatMessages.map((msg, index) => (
-                <Message key={msg.role + "-" + index} message={msg} modelId={selectedModelId} />
+                <Message key={msg.role + '-' + index} message={msg} modelId={selectedModelId} />
               ))}
 
               {streamingContent && (
                 <Message
                   message={{ role: 'assistant', content: streamingContent }}
                   isStreaming={true}
+                  modelId={selectedModelId}
+                />
+              )}
+
+              {agentStreamingText && (
+                <Message
+                  message={{ role: 'assistant', content: agentStreamingText }}
+                  isStreaming={agentStatus === 'running'}
                   modelId={selectedModelId}
                 />
               )}
@@ -456,7 +523,7 @@ export default function App() {
               onAbort={handleAbort}
               attachments={attachments}
               onRemoveAttachment={removeImage}
-              disabled={!selectedModelId || (agentMode && !canUseAgent)}
+              disabled={!selectedModelId || (agentMode && !canUseAgent) || effectiveBusy}
               streaming={status === 'streaming' || agentStatus === 'running'}
               canSend={canSend}
               visionEnabled={selectedModel?.capabilities.includes('vision') ?? false}
@@ -483,4 +550,3 @@ export default function App() {
     </main>
   );
 }
-
