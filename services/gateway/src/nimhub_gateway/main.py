@@ -161,7 +161,6 @@ async def mcp_call(request: MCPToolCallRequest):
                 "tool": exc.tool.qualified_name,
                 "arguments_sha256": exc.arguments_sha256,
                 "approval_token": exc.approval_token,
-                "approval_token": exc.approval_token,
             },
         ) from exc
     except MCPPolicyError as exc:
