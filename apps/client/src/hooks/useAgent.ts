@@ -71,13 +71,13 @@ export function useAgent({
   ), []);
 
   const absorbResponse = useCallback(
-    (response: AgentRunResponse) => {
+    async (response: AgentRunResponse) => {
       const messages = response.messages.map(toChatMessage);
       const delta = messages.slice(previousLengthRef.current);
       previousLengthRef.current = messages.length;
       continuationRef.current = messages;
 
-      if (delta.length > 0) onMessages?.(delta);
+      if (delta.length > 0) await onMessages?.(delta);
 
       setStreamingText('');
       setApprovals(response.approvals);
@@ -127,7 +127,7 @@ export function useAgent({
               approvals: event.approvals ?? [],
               turns: event.turns ?? 0,
             };
-            absorbResponse(response);
+            await absorbResponse(response);
             return;
           }
           case 'done': {
@@ -139,7 +139,7 @@ export function useAgent({
               approvals: [],
               turns: event.turns ?? 0,
             };
-            absorbResponse(response);
+            await absorbResponse(response);
             return;
           }
           case 'max_turns': {
@@ -151,7 +151,7 @@ export function useAgent({
               approvals: [],
               turns: event.turns ?? 0,
             };
-            absorbResponse(response);
+            await absorbResponse(response);
             return;
           }
           case 'error':
