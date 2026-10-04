@@ -449,6 +449,7 @@ class AgentRuntime:
                     yield {
                         "type": "tool_result",
                         "tool": result.tool,
+                        "tool_call_id": str(call.get("id") or "unknown"),
                         "is_error": result.is_error,
                         "turn": 0,
                     }
@@ -600,6 +601,7 @@ class AgentRuntime:
                     yield {
                         "type": "tool_result",
                         "tool": result.tool,
+                        "tool_call_id": str(call.get("id") or "unknown"),
                         "is_error": result.is_error,
                         "turn": turn,
                     }
