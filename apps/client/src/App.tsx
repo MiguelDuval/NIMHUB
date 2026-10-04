@@ -266,6 +266,10 @@ export default function App() {
     (modelId: string) => {
       if (effectiveBusy) return;
       resetAgent();
+      const nextModel = models.find((model) => model.id === modelId);
+      if (!nextModel?.capabilities.includes('vision') && attachments.length > 0) {
+        clearAttachments();
+      }
       selectModel(modelId);
       if (currentConversation) {
         updateConversation(currentConversation.id, { modelId });
@@ -277,6 +281,9 @@ export default function App() {
       updateConversation,
       resetAgent,
       effectiveBusy,
+      models,
+      attachments.length,
+      clearAttachments,
     ],
   );
 
@@ -329,6 +336,7 @@ export default function App() {
     () =>
       Boolean(inputMessage.trim() || attachments.length > 0) &&
       Boolean(selectedModelId) &&
+      (attachments.length === 0 || (selectedModel?.capabilities.includes('vision') ?? false)) &&
       !effectiveBusy &&
       (agentMode
         ? canUseAgent
@@ -340,6 +348,7 @@ export default function App() {
       effectiveBusy,
       agentMode,
       agentStatus,
+      selectedModel,
       canUseAgent,
       status,
     ],
