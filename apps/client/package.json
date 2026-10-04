@@ -12,18 +12,19 @@
     "android:sync": "npx cap sync android"
   },
   "dependencies": {
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
+    "@capacitor/android": "8.5.2",
     "@capacitor/core": "8.5.2",
-    "@capacitor/android": "8.5.2"
+    "idb": "^8.0.3",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.5.2",
     "@types/react": "19.2.5",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.1.1",
     "typescript": "7.0.2",
     "vite": "8.3.2",
-    "vitest": "5.0.3",
-    "@capacitor/cli": "8.5.2"
+    "vitest": "5.0.3"
   }
 }

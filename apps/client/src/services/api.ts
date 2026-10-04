@@ -1,0 +1,142 @@
+/**
+ * API Service Layer
+ * Handles all communication with the NIM Hub Gateway
+ */
+
+import type {
+  ModelCapabilityInfo,
+  NIMModelListResponse,
+  ChatCompletionRequest,
+  ChatCompletionResponse,
+  ChatCompletionChunk,
+  HealthResponse,
+} from '../types';
+import { transformModels } from './models';
+
+const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL ?? 'http://127.0.0.1:8787';
+
+export class APIError extends Error {
+  public readonly code: string;
+  public readonly retryable: boolean;
+  public readonly provider?: string;
+  public readonly requestId?: string;
+  public readonly status: number;
+
+  constructor(
+    message: string,
+    code: string,
+    status: number,
+    retryable: boolean,
+    provider?: string,
+    requestId?: string
+  ) {
+    super(message);
+    this.name = 'APIError';
+    this.code = code;
+    this.status = status;
+    this.retryable = retryable;
+    this.provider = provider;
+    this.requestId = requestId;
+  }
+
+  static fromResponse(response: Response, data: unknown): APIError {
+    const detail = data as Record<string, unknown> | undefined;
+    return new APIError(
+      (detail?.message as string) ?? `Request failed: ${response.status}`,
+      (detail?.code as string) ?? 'UNKNOWN_ERROR',
+      response.status,
+      (detail?.retryable as boolean) ?? response.status >= 500,
+      detail?.provider as string | undefined,
+      detail?.requestId as string | undefined
+    );
+  }
+}
+
+async function handleResponse<T>(response: Response): Promise<T> {
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw APIError.fromResponse(response, data);
+  }
+  return data as T;
+}
+
+export const api = {
+  /**
+   * Health check endpoint
+   */
+  async health(): Promise<HealthResponse> {
+    const response = await fetch(`${GATEWAY_URL}/api/health`);
+    return handleResponse<HealthResponse>(response);
+  },
+
+  /**
+   * List available models from NVIDIA NIM
+   */
+  async listModels(): Promise<ModelCapabilityInfo[]> {
+    const response = await fetch(`${GATEWAY_URL}/api/models`);
+    const data = await handleResponse<NIMModelListResponse>(response);
+    return transformModels(data.data);
+  },
+
+  /**
+   * Non-streaming chat completion
+   */
+  async chat(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
+    const response = await fetch(`${GATEWAY_URL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...request, stream: false }),
+    });
+    return handleResponse<ChatCompletionResponse>(response);
+  },
+
+  /**
+   * Streaming chat completion using SSE
+   */
+  async *chatStream(request: ChatCompletionRequest): AsyncGenerator<ChatCompletionChunk, void, unknown> {
+    const response = await fetch(`${GATEWAY_URL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...request, stream: true }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw APIError.fromResponse(response, data);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('No response body');
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6).trim();
+            if (data === '[DONE]') return;
+            try {
+              const chunk = JSON.parse(data) as ChatCompletionChunk;
+              yield chunk;
+            } catch {
+              // Ignore parse errors for malformed chunks
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  },
+};
