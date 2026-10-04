@@ -90,7 +90,8 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
     const previous = getMediaModelDefinition(mediaModelId);
     const currentBase = mediaProfile?.baseUrl ?? '';
     const baseWasKnownDefault = !currentBase || currentBase === previous?.defaultBaseUrl;
-    const nextBase = next.defaultBaseUrl || (baseWasKnownDefault ? '' : currentBase);
+    const changingSelfHostedModel = next.availability === 'self-hosted' && next.id !== previous?.id;
+    const nextBase = next.defaultBaseUrl || (changingSelfHostedModel ? '' : (baseWasKnownDefault ? '' : currentBase));
     setMediaModelId(next.id);
     setMediaProfile((current) => current ? { ...current, model: next.id, baseUrl: nextBase } : current);
     try { await setMediaProviderModel(visualKind, next.id, nextBase); }
@@ -123,18 +124,23 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
 
   const runImageGenerate = async () => {
     if (!prompt.trim()) return;
+    if (!nvidiaConfigured) { onOpenSettings(); return; }
+    if (!selectedMediaModel?.functions.includes('image-generation')) { setError('Selected model does not support image generation.'); return; }
     setBusy(true); setError(null); clearArtifact();
     try {
       const response = await generateImage({ model: selectedMediaModel?.id ?? '', prompt: prompt.trim(), size: imageSize, n: 1, response_format: 'b64_json' });
       const base64 = firstBase64Image(response);
       if (!base64) throw new Error('Image endpoint returned no base64 image');
-      await saveArtifact('image', base64ToBlob(base64, 'image/png'), 'nimhub-image.png');
+      const mimeType = selectedMediaModel?.transport === 'cosmos3' ? 'image/jpeg' : 'image/png';
+      await saveArtifact('image', base64ToBlob(base64, mimeType), 'nimhub-image.' + (mimeType === 'image/jpeg' ? 'jpg' : 'png'));
     } catch (err) { setError(err instanceof Error ? err.message : 'Image generation failed'); }
     finally { setBusy(false); }
   };
 
   const runImageEdit = async () => {
     if (!prompt.trim() || !referenceImage) return;
+    if (!nvidiaConfigured) { onOpenSettings(); return; }
+    if (!selectedMediaModel?.functions.includes('image-editing')) { setError('Select Qwen Image Edit 2511 for reference-image editing.'); return; }
     setBusy(true); setError(null); clearArtifact();
     try {
       const response = await editImage({
@@ -208,6 +214,8 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
 
   const runVideo = async () => {
     if (!prompt.trim()) return;
+    if (!nvidiaConfigured) { onOpenSettings(); return; }
+    if (!selectedMediaModel?.functions.includes('video-generation')) { setError('Selected model does not support video generation.'); return; }
     setBusy(true); setError(null); clearArtifact();
     try {
       const inputReference = videoImage ? await fileToDataUrl(videoImage) : undefined;
