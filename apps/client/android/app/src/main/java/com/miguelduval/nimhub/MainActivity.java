@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         // Custom Capacitor plugins must be registered before the Bridge is initialized.
         registerPlugin(SecureStoragePlugin.class);
+        registerPlugin(NimhubMediaHttpPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

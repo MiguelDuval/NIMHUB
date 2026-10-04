@@ -60,6 +60,70 @@ export interface ImageGenerationResponse {
   }>;
 }
 
+export interface ImageEditRequest {
+  model: string;
+  prompt: string;
+  image: Blob;
+  fileName?: string;
+  mimeType?: string;
+  n?: number;
+  response_format?: 'url' | 'b64_json';
+}
+
+export interface ImageEditResponse extends ImageGenerationResponse {}
+
+export interface VideoGenerationRequest {
+  model: string;
+  prompt: string;
+  size?: string;
+  seconds?: number;
+  input_reference?: string;
+}
+
+export interface VideoGenerationResponse {
+  created?: number;
+  id?: string;
+  status?: string;
+  data: Array<{
+    url?: string;
+    b64_json?: string;
+  }> | {
+    url?: string;
+    b64_json?: string;
+  };
+}
+
+export interface TranscriptionResponse {
+  text: string;
+}
+
+export interface TTSRequest {
+  model?: string;
+  language?: string;
+  text?: string;
+  voice?: string;
+  sample_rate_hz?: number;
+}
+
+export interface NativeMultipartResponse {
+  status: number;
+  contentType: string;
+  data_base64: string;
+}
+
+export type ArtifactType = 'image' | 'audio' | 'video' | 'document';
+
+export interface Artifact {
+  id: string;
+  type: ArtifactType;
+  mimeType: string;
+  name: string;
+  size: number;
+  blob: Blob;
+  createdAt: string;
+  metadata?: Record<string, unknown>;
+}
+
 // ============================================================================
 // Job / Async Types (for video, long-running)
 // ============================================================================

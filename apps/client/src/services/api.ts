@@ -158,8 +158,17 @@ async function nvidiaConfiguredForClient(): Promise<boolean> {
 function normalizeDirectModels(data: any): ModelCapabilityInfo[] {
   const models = Array.isArray(data?.data) ? data.data : [];
   const discoveredAt = new Date().toISOString();
+  function infer(id: string): { endpointFamily: ModelCapabilityInfo['endpointFamily']; capabilities: ModelCapability[] } | null {
+    const value = id.toLowerCase();
+    if (/flux|stable-diffusion|qwen[-_/]image/.test(value)) return { endpointFamily: 'image', capabilities: ['image-generation'] };
+    if (/wan2|wan-ai|video/.test(value)) return { endpointFamily: 'video', capabilities: ['video-generation'] };
+    if (/parakeet|fastconformer|transcri|asr|speech-to-text/.test(value)) return { endpointFamily: 'speech', capabilities: ['asr'] };
+    if (/magpie|tts|text-to-speech|speech-synthesis/.test(value)) return { endpointFamily: 'speech', capabilities: ['tts'] };
+    return null;
+  }
   return models.map((model: Record<string, unknown>) => {
     const id = String(model.id ?? '').trim();
+    const inferred = infer(id);
     const rawCapabilities: ModelCapability[] = Array.isArray(model.capabilities)
       ? model.capabilities.filter(
           (item): item is ModelCapability =>
@@ -177,15 +186,31 @@ function normalizeDirectModels(data: any): ModelCapabilityInfo[] {
         )
       : [];
     const capabilities: ModelCapability[] =
-      rawCapabilities.length > 0 ? rawCapabilities : ['chat'];
+      rawCapabilities.length > 0 ? rawCapabilities : inferred?.capabilities ?? ['chat'];
+    const endpointFamily = (
+      typeof model.endpoint_family === 'string' &&
+      ['chat', 'image', 'video', 'speech', 'embedding'].includes(model.endpoint_family)
+        ? model.endpoint_family
+        : inferred?.endpointFamily ?? 'chat'
+    ) as ModelCapabilityInfo['endpointFamily'];
 
     return {
       id,
       name: typeof model.name === 'string' ? model.name : id,
       provider: 'nvidia',
-      endpointFamily: 'chat',
-      inputModalities: capabilities.includes('vision') ? ['text', 'image'] : ['text'],
-      outputModalities: ['text'],
+      endpointFamily,
+      inputModalities: endpointFamily === 'image'
+        ? ['text']
+        : capabilities.includes('vision') ? ['text', 'image'] : ['text'],
+      outputModalities: endpointFamily === 'image'
+        ? ['image']
+        : endpointFamily === 'video'
+          ? ['video']
+          : endpointFamily === 'speech' && capabilities.includes('tts')
+            ? ['audio']
+            : endpointFamily === 'speech'
+              ? ['text']
+              : ['text'],
       capabilities,
       discoveredAt,
       contextWindow:

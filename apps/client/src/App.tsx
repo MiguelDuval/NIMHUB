@@ -18,6 +18,7 @@ import { WelcomeMessage } from './components/WelcomeMessage';
 import { Composer } from './components/Composer';
 import { AgentApprovalCard } from './components/AgentApprovalCard';
 import { SettingsScreen } from './components/SettingsScreen';
+import { MediaStudio, type MediaMode } from './components/MediaStudio';
 import './styles.css';
 
 function storedToChatMessage(msg: StoredMessage): ChatMessage {
@@ -88,6 +89,7 @@ export default function App() {
   const [retryCount, setRetryCount] = useState(0);
   const [agentMode, setAgentMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [workspaceMode, setWorkspaceMode] = useState<MediaMode | 'chat'>('chat');
   const currentConversationRef = useRef(currentConversation);
   const messagesAreaRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
@@ -318,6 +320,15 @@ export default function App() {
     ],
   );
 
+  const handleWorkspaceModeChange = useCallback((mode: MediaMode | 'chat') => {
+    if (effectiveBusy) return;
+    if (mode !== 'chat' && agentMode) {
+      setAgentMode(false);
+      resetAgent();
+    }
+    setWorkspaceMode(mode);
+  }, [effectiveBusy, agentMode, resetAgent]);
+
   const handleAgentToggle = useCallback(() => {
     if (effectiveBusy) return;
     if (agentMode) {
@@ -367,6 +378,7 @@ export default function App() {
     () =>
       Boolean(inputMessage.trim() || attachments.length > 0) &&
       Boolean(selectedModelId) &&
+      selectedModel?.endpointFamily === 'chat' &&
       nvidiaConfigured === true &&
       (attachments.length === 0 || (selectedModel?.capabilities.includes('vision') ?? false)) &&
       !effectiveBusy &&
@@ -382,6 +394,7 @@ export default function App() {
       selectedModel,
       nvidiaConfigured,
       canUseAgent,
+      workspaceMode,
       status,
     ],
   );
@@ -454,6 +467,19 @@ export default function App() {
           <h1>NIM Hub</h1>
         </div>
         <div className="topbar-center">
+          <div className="workstation-mode-buttons" aria-label="Workspace mode">
+            {(['chat', 'image', 'voice', 'video'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                className={'mode-toggle ' + (workspaceMode === mode ? 'active' : '')}
+                onClick={() => handleWorkspaceModeChange(mode)}
+                disabled={effectiveBusy}
+              >
+                {mode === 'chat' ? 'Chat' : mode === 'image' ? 'Image' : mode === 'voice' ? 'Voice' : 'Video'}
+              </button>
+            ))}
+          </div>
           <button
             className={'mode-toggle ' + (agentMode ? 'active' : '')}
             onClick={handleAgentToggle}
@@ -565,6 +591,7 @@ export default function App() {
         )}
 
         <div className="main-area">
+          {workspaceMode === 'chat' ? (
           <div className="chat-container">
             {!nvidiaConfigured && (
               <div className="setup-card" role="status">
@@ -698,6 +725,14 @@ export default function App() {
               }
             />
           </div>
+          ) : (
+            <MediaStudio
+              mode={workspaceMode}
+              chatModelId={selectedModelId}
+              nvidiaConfigured={nvidiaConfigured === true}
+              onOpenSettings={() => setShowSettings(true)}
+            />
+          )}
         </div>
       </section>
 

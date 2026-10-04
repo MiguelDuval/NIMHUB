@@ -4,10 +4,10 @@
  */
 
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { Conversation, StoredMessage, ConversationSummary } from '../types';
+import type { Artifact, Conversation, StoredMessage, ConversationSummary } from '../types';
 
 const DB_NAME = 'nim-hub';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 interface NIMHubDB extends DBSchema {
   conversations: {
@@ -19,6 +19,11 @@ interface NIMHubDB extends DBSchema {
     key: string;
     value: StoredMessage;
     indexes: { 'by-conversationId': string; 'by-createdAt': string };
+  };
+  artifacts: {
+    key: string;
+    value: Artifact;
+    indexes: { 'by-createdAt': string; 'by-type': string };
   };
 }
 
@@ -46,6 +51,12 @@ async function getDB(): Promise<IDBPDatabase<NIMHubDB>> {
         const msgStore = db.createObjectStore('messages', { keyPath: 'id' });
         msgStore.createIndex('by-conversationId', 'conversationId');
         msgStore.createIndex('by-createdAt', 'createdAt');
+      }
+
+      if (oldVersion < 3) {
+        const artifactStore = db.createObjectStore('artifacts', { keyPath: 'id' });
+        artifactStore.createIndex('by-createdAt', 'createdAt');
+        artifactStore.createIndex('by-type', 'type');
       }
     },
   });
@@ -274,13 +285,44 @@ export const storage = {
     }
   },
 
+  async saveArtifact(input: Omit<Artifact, 'id' | 'createdAt' | 'size'> & { size?: number }): Promise<Artifact> {
+    const db = await getDB();
+    const artifact: Artifact = {
+      ...input,
+      id: generateId(),
+      createdAt: nowISO(),
+      size: input.size ?? input.blob.size,
+    };
+    await db.put('artifacts', artifact);
+    return artifact;
+  },
+
+  async getArtifact(id: string): Promise<Artifact | undefined> {
+    const db = await getDB();
+    return db.get('artifacts', id);
+  },
+
+  async getArtifacts(type?: Artifact['type']): Promise<Artifact[]> {
+    const db = await getDB();
+    const artifacts = type
+      ? await db.getAllFromIndex('artifacts', 'by-type', type)
+      : await db.getAll('artifacts');
+    return artifacts.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  },
+
+  async deleteArtifact(id: string): Promise<void> {
+    const db = await getDB();
+    await db.delete('artifacts', id);
+  },
+
   /**
    * Clear all data (for testing/reset)
    */
-  async clearAll(): Promise<void> {
+  async clearAll(): Promise<void>
     const db = await getDB();
     await db.clear('conversations');
     await db.clear('messages');
+    await db.clear('artifacts');
   },
 };
 

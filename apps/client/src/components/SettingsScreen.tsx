@@ -8,6 +8,7 @@ import {
   normalizeNvidiaBaseUrl,
   saveNvidiaConfig,
 } from '../services/nvidiaConfig';
+import { MediaProviderSettings } from './MediaProviderSettings';
 import type { GatewayConnectionStatus } from '../hooks/useGatewayStatus';
 import type { HealthResponse } from '../types';
 
@@ -272,15 +273,17 @@ export function SettingsScreen({
             </div>
           </section>
 
+          <MediaProviderSettings />
+
           <section className="settings-card">
             <div className="settings-kicker">CAPABILITY STATUS</div>
             <div className="settings-feature-grid">
               <div><strong>Chat</strong><span>Live NVIDIA NIM</span></div>
               <div><strong>Model discovery</strong><span>Live /models</span></div>
               <div><strong>Vision input</strong><span>Available for models that advertise vision</span></div>
-              <div><strong>Agent + MCP + GitHub</strong><span>Requires the optional gateway</span></div>
-              <div><strong>Image / video generation</strong><span>Engine not exposed in this build yet</span></div>
-              <div><strong>ASR / TTS</strong><span>Engine not exposed in this build yet</span></div>
+              <div><strong>Agent + MCP + GitHub</strong><span>Requires the optional gateway and a tool-capable Chat model</span></div>
+              <div><strong>Image / video generation</strong><span>Available in Media Studio via the dedicated profiles</span></div>
+              <div><strong>ASR / TTS</strong><span>Available in Voice mode via native Android transport</span></div>
             </div>
           </section>
 

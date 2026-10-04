@@ -915,3 +915,29 @@
   .settings-icon-label { display: none; }
   .settings-icon-button { width: 38px; padding: 0; }
 }
+
+
+/* Phase 2 media workstation */
+.workstation-mode-buttons { display: inline-flex; gap: 6px; flex-wrap: wrap; margin-right: 8px; }
+.media-studio { min-height: 100%; padding: 20px; overflow: auto; display: grid; align-content: start; gap: 14px; }
+.media-studio-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
+.media-studio-header h2 { margin: 4px 0 5px; font-size: 21px; }
+.media-studio-header p { margin: 0; font-size: 12px; opacity: .58; }
+.media-prompt-field, .voice-transcript-card, .voice-answer-card { display: grid; gap: 8px; padding: 14px; border: 1px solid #1f2730; border-radius: 12px; background: #10151b; }
+.media-prompt-field > span { font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; opacity: .55; }
+.media-prompt-field textarea, .voice-transcript-card textarea { min-height: 140px; width: 100%; box-sizing: border-box; resize: vertical; padding: 11px; border: 1px solid #2a323c; border-radius: 8px; background: #0a0e13; color: #e5e7eb; font: 14px/1.45 inherit; }
+.media-control-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.media-action-row { display: flex; flex-wrap: wrap; gap: 9px; }
+.media-result-image, .media-result-video { width: min(100%, 900px); max-height: 70vh; object-fit: contain; border-radius: 10px; background: #07090c; border: 1px solid #1f2730; }
+.media-artifact-meta { font-size: 11px; opacity: .58; }
+.recording-button { border-color: rgba(239,68,68,.4); color: #fecaca; }
+.voice-transcript-card textarea { min-height: 100px; }
+.voice-answer-card p { margin: 0; white-space: pre-wrap; line-height: 1.55; }
+.media-provider-card { display: grid; gap: 11px; padding: 13px; border: 1px solid #202934; border-radius: 11px; background: #0d1218; }
+@media (max-width: 760px) {
+  .media-studio { padding: 12px; }
+  .media-studio-header { flex-direction: column; }
+  .media-control-grid { grid-template-columns: 1fr; }
+  .workstation-mode-buttons { width: 100%; margin-right: 0; }
+  .workstation-mode-buttons .mode-toggle { flex: 1 1 auto; }
+}
