@@ -941,3 +941,17 @@
   .workstation-mode-buttons { width: 100%; margin-right: 0; }
   .workstation-mode-buttons .mode-toggle { flex: 1 1 auto; }
 }
+
+/* Target-specific NVIDIA model UI */
+.media-model-card{display:grid;gap:10px;padding:13px;border:1px solid #26303b;border-radius:11px;background:#0d1218}
+.media-model-explainer{display:grid;gap:5px;padding:9px 10px;border-radius:8px;background:#0a0f14;font-size:10px;line-height:1.45}
+.media-model-explainer span{opacity:.62}.media-model-explainer code{font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow-wrap:anywhere}
+.advanced-voice-settings{border-top:1px solid #1d232b;padding-top:12px}.advanced-voice-settings>summary{cursor:pointer;font-size:11px;font-weight:800;color:#cbd5e1}.advanced-voice-content{display:grid;gap:10px;margin-top:10px}
+.instructions-overlay{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(3,5,8,.76);backdrop-filter:blur(6px)}
+.instructions-dialog{width:min(720px,100%);max-height:min(86vh,760px);display:flex;flex-direction:column;border:1px solid #2a3440;border-radius:15px;background:#0b0f14;box-shadow:0 24px 80px rgba(0,0,0,.5)}
+.instructions-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:18px;border-bottom:1px solid #1d232b}.instructions-header h2{margin:4px 0 5px;font-size:22px}.instructions-header p{margin:0;max-width:580px;font-size:11px;line-height:1.45;opacity:.58}
+.instructions-scroll{overflow:auto;display:grid;gap:10px;padding:14px 18px 18px}.instructions-card{display:grid;gap:7px;padding:12px;border:1px solid #1f2730;border-radius:10px;background:#10151b}.instructions-card strong{font-size:12px}.instructions-card p{margin:0;font-size:11px;line-height:1.5;opacity:.7}
+.instructions-model{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:7px 8px;border-radius:8px;background:#0c1117}.instructions-model span{font-size:10px;opacity:.58;text-align:right}.instructions-note{opacity:.54!important}.instructions-warning-card{border-color:rgba(245,158,11,.23)}
+.instructions-footer{display:flex;flex-wrap:wrap;gap:12px;padding:12px 18px 16px;border-top:1px solid #1d232b}.instructions-footer a{color:#93c5fd;font-size:10px;font-weight:800}
+.settings-header-actions{display:flex;align-items:flex-start;gap:8px}.settings-instructions-button{white-space:nowrap;min-height:36px}
+@media(max-width:760px){.instructions-overlay{padding:8px}.instructions-dialog{max-height:calc(100vh - 16px)}.settings-header-actions{flex-direction:column;align-items:flex-end}}
