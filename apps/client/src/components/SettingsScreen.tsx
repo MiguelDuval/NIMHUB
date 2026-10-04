@@ -4,6 +4,7 @@ import {
   clearNvidiaConfig,
   DEFAULT_NVIDIA_BASE_URL,
   getNvidiaBaseUrl,
+  normalizeNvidiaApiKey,
   normalizeNvidiaBaseUrl,
   saveNvidiaConfig,
 } from '../services/nvidiaConfig';
@@ -63,11 +64,17 @@ export function SettingsScreen({
     setError(null);
     try {
       const normalized = normalizeNvidiaBaseUrl(baseUrl);
+      const normalizedKey = normalizeNvidiaApiKey(apiKey);
+
+      // Verify the exact token that will be persisted. This accepts common
+      // clipboard formats such as "NVAPI - nvapi-..." but always stores the
+      // canonical raw nvapi-... value.
       const result = await api.testNvidiaSettings({
-        apiKey: apiKey.trim(),
+        apiKey: normalizedKey,
         baseUrl: normalized,
       });
-      await saveNvidiaConfig(apiKey.trim(), normalized);
+
+      await saveNvidiaConfig(normalizedKey, normalized);
       await onNvidiaChanged();
       await onRefreshModels();
       setApiKey('');
@@ -189,6 +196,11 @@ export function SettingsScreen({
                 disabled={testingNvidia}
               />
             </label>
+
+            <p className="settings-help">
+              Accepted clipboard formats include <strong>nvapi-…</strong>, <strong>NVAPI nvapi-…</strong> and
+              <strong> NVAPI - nvapi-…</strong>. The app stores only the raw <strong>nvapi-…</strong> token.
+            </p>
 
             <div className="settings-actions">
               <button
