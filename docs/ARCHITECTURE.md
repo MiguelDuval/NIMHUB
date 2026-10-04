@@ -1,7 +1,7 @@
 # NIM Hub — Architecture
 
 ## Runtime
-Browser/Android PWA -> HTTP/SSE -> Personal Gateway (FastAPI) -> NIM provider adapters / Agent runtime / MCP client / persistence / job and artifact manager.
+Android APK -> native NVIDIA NIM HTTP for core chat/model discovery. The APK can optionally connect to a Personal Gateway (FastAPI) for Agent runtime, MCP, GitHub and server-side jobs/artifacts.
 
 ## Repository target
 `apps/client` — React + TypeScript + Vite PWA.
@@ -14,7 +14,7 @@ Browser/Android PWA -> HTTP/SSE -> Personal Gateway (FastAPI) -> NIM provider ad
 Presentation, local UI state, conversation rendering, capture of microphone/camera/files, artifact preview, approvals and connection state.
 
 ## Gateway responsibilities
-Secret injection, validation, provider routing, streaming normalization, agent loop, MCP, jobs, persistence and structured errors.
+Optional secret injection, validation, provider routing, streaming normalization, agent loop, MCP, jobs, persistence and structured errors. Runtime NVIDIA requests from Android may carry the device-held NVIDIA key in a transient request header; the gateway must not persist or log it.
 
 ## Provider adapters
 Prefer narrow interfaces: ChatProvider, ImageProvider, VideoProvider, SpeechToTextProvider, TextToSpeechProvider.
@@ -35,4 +35,4 @@ Start with a small deterministic tool-calling loop. NeMo Agent Toolkit is an app
 Gateway-side MCP host/client. Start with Streamable HTTP and stdio using official SDKs. Keep server definitions separate from credentials.
 
 ## Android packaging
-Add Capacitor only after the PWA is stable; keep the gateway separate unless a future design explicitly changes that.
+Keep Capacitor as the Android shell. The gateway remains a separate optional service and is not required for basic NVIDIA chat/model usage.
