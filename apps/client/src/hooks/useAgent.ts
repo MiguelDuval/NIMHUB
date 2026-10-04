@@ -9,6 +9,16 @@ import type {
 
 export type AgentStatus = 'idle' | 'running' | 'approval_required' | 'success' | 'error' | 'cancelled';
 
+export interface AgentActivity {
+  id: string;
+  type: 'tool_result' | 'tool_error';
+  tool?: string;
+  toolCallId?: string;
+  isError?: boolean;
+  message?: string;
+  turn?: number;
+}
+
 interface UseAgentOptions {
   modelId: string;
   onMessages?: (messages: ChatMessage[]) => void | Promise<void>;
@@ -20,6 +30,7 @@ interface UseAgentReturn {
   error: APIError | null;
   approvals: AgentApprovalRequest[];
   streamingText: string;
+  activities: AgentActivity[];
   run: (messages: ChatMessage[]) => Promise<void>;
   approve: () => Promise<void>;
   abort: () => void;
@@ -51,6 +62,7 @@ export function useAgent({
   const [error, setError] = useState<APIError | null>(null);
   const [approvals, setApprovals] = useState<AgentApprovalRequest[]>([]);
   const [streamingText, setStreamingText] = useState('');
+  const [activities, setActivities] = useState<AgentActivity[]>([]);
 
   const continuationRef = useRef<ChatMessage[]>([]);
   const previousLengthRef = useRef(0);
@@ -80,6 +92,7 @@ export function useAgent({
       if (delta.length > 0) await onMessages?.(delta);
 
       setStreamingText('');
+      setActivities([]);
       setApprovals(response.approvals);
       if (response.status === 'completed') {
         setStatus('success');
@@ -163,7 +176,29 @@ export function useAgent({
               false,
             );
           case 'tool_result':
+            setActivities((current) => [
+              ...current,
+              {
+                id: `result-${event.toolCallId ?? event.tool ?? current.length}`,
+                type: 'tool_result',
+                tool: event.tool,
+                toolCallId: event.tool_call_id,
+                isError: event.is_error,
+                turn: event.turn,
+              },
+            ]);
+            break;
           case 'tool_error':
+            setActivities((current) => [
+              ...current,
+              {
+                id: `error-${event.tool_call_id ?? current.length}`,
+                type: 'tool_error',
+                toolCallId: event.tool_call_id,
+                message: event.message,
+              },
+            ]);
+            break;
           case 'continue':
             break;
           default:
@@ -188,6 +223,7 @@ export function useAgent({
       continuationRef.current = messages;
       previousLengthRef.current = messages.length;
       setApprovals([]);
+      setActivities([]);
       setStreamingText('');
       setError(null);
       setStatus('running');
@@ -255,6 +291,7 @@ export function useAgent({
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
     setStreamingText('');
+    setActivities([]);
     setApprovals([]);
     setError(null);
     setStatus('cancelled');
@@ -296,6 +333,7 @@ export function useAgent({
     continuationRef.current = [];
     previousLengthRef.current = 0;
     setStreamingText('');
+    setActivities([]);
     setApprovals([]);
     setError(null);
     setStatus('idle');
@@ -306,6 +344,7 @@ export function useAgent({
     error,
     approvals,
     streamingText,
+    activities,
     run,
     approve,
     abort,
