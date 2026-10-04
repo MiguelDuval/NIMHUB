@@ -55,7 +55,9 @@ export class APIError extends Error {
 async function handleResponse<T>(response: Response): Promise<T> {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw APIError.fromResponse(response, data);
+    // Gateway wraps errors in { detail: { code, message, retryable } }
+    const errorData = (data as Record<string, unknown>)?.detail ?? data;
+    throw APIError.fromResponse(response, errorData);
   }
   return data as T;
 }
@@ -102,7 +104,9 @@ export const api = {
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
-      throw APIError.fromResponse(response, data);
+      // Gateway wraps errors in { detail: { code, message, retryable } }
+      const errorData = (data as Record<string, unknown>)?.detail ?? data;
+      throw APIError.fromResponse(response, errorData);
     }
 
     const reader = response.body?.getReader();
