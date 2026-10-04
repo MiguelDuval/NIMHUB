@@ -25,17 +25,31 @@ def test_mcp_servers_endpoint_is_safe_by_default() -> None:
     assert response.json()["servers"] == []
 
 
-def test_agent_requires_gateway_side_nvidia_configuration() -> None:
+def test_agent_requires_any_nvidia_configuration(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "nvidia_api_key", "")
     response = client.post(
         "/api/agent",
-        json={
-            "model": "test-model",
-            "messages": [{"role": "user", "content": "hello"}],
-        },
+        json={"model": "test-model", "messages": [{"role": "user", "content": "hello"}]},
     )
-
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "NVIDIA_NOT_CONFIGURED"
+
+
+def test_agent_accepts_transient_client_nvidia_key(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "nvidia_api_key", "")
+
+    async def fake_run(_request, api_key=None):
+        assert api_key == "nvapi-client-test"
+        return {"status": "completed", "response": None, "messages": [], "approvals": [], "turns": 1}
+
+    monkeypatch.setattr(agent_runtime, "run", fake_run)
+    response = client.post(
+        "/api/agent",
+        headers={"X-NVIDIA-API-Key": "nvapi-client-test"},
+        json={"model": "test-model", "messages": [{"role": "user", "content": "hello"}]},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"
 
 def test_agent_stream_endpoint_emits_real_sse_frame_separators(monkeypatch) -> None:
     monkeypatch.setattr(settings, "nvidia_api_key", "test-key")
