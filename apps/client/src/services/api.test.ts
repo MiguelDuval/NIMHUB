@@ -134,6 +134,36 @@ describe('MCP gateway API', () => {
     );
   });
 
+  it('passes the AbortSignal to the chat stream request', async () => {
+    const body = 'data: {"id":"chat-1","object":"chat.completion.chunk","choices":[]}' + '\n\n';
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const controller = new AbortController();
+    for await (const _chunk of api.chatStream(
+      {
+        model: 'test-model',
+        messages: [{ role: 'user', content: 'hello' }],
+      },
+      controller.signal,
+    )) {
+      break;
+    }
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:8787/api/chat',
+      expect.objectContaining({
+        method: 'POST',
+        signal: controller.signal,
+      }),
+    );
+  });
+
   it('parses streamed chat SSE events', async () => {
     const body = [
       'data: {"id":"chat-1","object":"chat.completion.chunk","choices":[{"delta":{"content":"hel"}}]}\n\n',
