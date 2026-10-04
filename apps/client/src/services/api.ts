@@ -19,8 +19,7 @@ import type {
   AgentStreamEvent,
 } from '../types';
 import { transformModels } from './models';
-
-const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL ?? 'http://127.0.0.1:8787';
+import { getGatewayUrl } from './gatewayConfig';
 
 export class APIError extends Error {
   public readonly code: string;
@@ -74,7 +73,7 @@ export const api = {
    * Health check endpoint
    */
   async health(): Promise<HealthResponse> {
-    const response = await fetch(`${GATEWAY_URL}/api/health`);
+    const response = await fetch(`${getGatewayUrl()}/api/health`);
     return handleResponse<HealthResponse>(response);
   },
 
@@ -82,7 +81,7 @@ export const api = {
    * List available models from NVIDIA NIM
    */
   async listModels(): Promise<ModelCapabilityInfo[]> {
-    const response = await fetch(`${GATEWAY_URL}/api/models`);
+    const response = await fetch(`${getGatewayUrl()}/api/models`);
     const data = await handleResponse<NIMModelListResponse>(response);
     return transformModels(data.data);
   },
@@ -91,7 +90,7 @@ export const api = {
    * Non-streaming chat completion
    */
   async chat(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
-    const response = await fetch(`${GATEWAY_URL}/api/chat`, {
+    const response = await fetch(`${getGatewayUrl()}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...request, stream: false }),
@@ -103,7 +102,7 @@ export const api = {
    * Streaming chat completion using SSE
    */
   async *chatStream(request: ChatCompletionRequest): AsyncGenerator<ChatCompletionChunk, void, unknown> {
-    const response = await fetch(`${GATEWAY_URL}/api/chat`, {
+    const response = await fetch(`${getGatewayUrl()}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...request, stream: true }),
@@ -155,7 +154,7 @@ export const api = {
    * List sanitized MCP server metadata.
    */
   async listMCPServers(): Promise<MCPServerSummary[]> {
-    const response = await fetch(`${GATEWAY_URL}/api/mcp/servers`);
+    const response = await fetch(`${getGatewayUrl()}/api/mcp/servers`);
     const data = await handleResponse<{ servers: MCPServerSummary[] }>(response);
     return data.servers;
   },
@@ -164,7 +163,7 @@ export const api = {
    * Discover sanitized MCP tool metadata.
    */
   async listMCPTools(): Promise<MCPToolSummary[]> {
-    const response = await fetch(`${GATEWAY_URL}/api/mcp/tools`);
+    const response = await fetch(`${getGatewayUrl()}/api/mcp/tools`);
     const data = await handleResponse<{ tools: MCPToolSummary[] }>(response);
     return data.tools;
   },
@@ -173,7 +172,7 @@ export const api = {
    * Call one MCP tool through the gateway permission boundary.
    */
   async callMCPTool(request: MCPToolCallRequest): Promise<MCPToolResult> {
-    const response = await fetch(`${GATEWAY_URL}/api/mcp/call`, {
+    const response = await fetch(`${getGatewayUrl()}/api/mcp/call`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
@@ -185,7 +184,7 @@ export const api = {
    * Run the gateway-owned model/MCP loop without streaming.
    */
   async agent(request: AgentRunRequest): Promise<AgentRunResponse> {
-    const response = await fetch(`${GATEWAY_URL}/api/agent`, {
+    const response = await fetch(`${getGatewayUrl()}/api/agent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...request, stream: false }),
@@ -202,7 +201,7 @@ export const api = {
     request: AgentRunRequest,
     signal?: AbortSignal,
   ): AsyncGenerator<AgentStreamEvent, void, unknown> {
-    const response = await fetch(`${GATEWAY_URL}/api/agent`, {
+    const response = await fetch(`${getGatewayUrl()}/api/agent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...request, stream: true }),
