@@ -671,6 +671,12 @@
 .gateway-settings-status .error { color: #ef4444; }
 
 @media (max-width: 760px) {
+  .topbar-right {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
   .gateway-settings {
     width: 100%;
   }
