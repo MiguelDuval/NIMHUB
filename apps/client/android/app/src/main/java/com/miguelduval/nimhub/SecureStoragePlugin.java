@@ -11,6 +11,7 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import org.json.JSONObject;
 
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
@@ -100,7 +101,7 @@ public class SecureStoragePlugin extends Plugin {
         }
 
         try {
-            prefs().edit().putString(key, encrypt(value)).apply();
+            prefs().edit().putString(key, encrypt(value)).commit();
             call.resolve();
         } catch (Exception e) {
             call.reject("Unable to store secure value");
@@ -118,7 +119,7 @@ public class SecureStoragePlugin extends Plugin {
         try {
             String stored = prefs().getString(key, null);
             JSObject result = new JSObject();
-            result.put("value", stored == null ? JSObject.NULL : decrypt(stored));
+            result.put("value", stored == null ? JSONObject.NULL : decrypt(stored));
             call.resolve(result);
         } catch (Exception e) {
             call.reject("Unable to read secure value");
