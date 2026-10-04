@@ -65,3 +65,16 @@ def test_agent_stream_endpoint_emits_real_sse_frame_separators(monkeypatch) -> N
     assert response.headers["content-type"].startswith("text/event-stream")
     assert b"data: {\"type\": \"done\", \"turns\": 1" in body
     assert body.endswith(b"\n\n")
+
+
+def test_cors_allows_capacitor_android_origin() -> None:
+    response = client.options(
+        "/api/health",
+        headers={
+            "Origin": "https://localhost",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "https://localhost"
