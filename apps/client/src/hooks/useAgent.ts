@@ -3,7 +3,6 @@ import { api, APIError } from '../services/api';
 import type {
   AgentApprovalRequest,
   AgentRunResponse,
-  AgentStreamEvent,
   ChatMessage,
   MCPApprovalGrant,
 } from '../types';
