@@ -1,23 +1,44 @@
-"""MCP client foundation for the NIM Hub gateway.
+"""Gateway-side MCP client, discovery and permission foundation.
 
-The gateway owns MCP configuration and credentials. The Android client only
-sees sanitized server/tool metadata; transport credentials never cross the
-gateway boundary.
+The gateway is the MCP host. MCP server configuration and credentials stay on
+the gateway; the Android client only receives sanitized metadata and approval
+requests.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 from contextlib import asynccontextmanager
+from os import environ
 from typing import Any, Literal
 
 import httpx2
+from jsonschema import Draft202012Validator
 from mcp import Client, StdioServerParameters
 from mcp.client.streamable_http import streamable_http_client
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 
+MCPPermission = Literal["read", "write", "destructive"]
+
+
 class MCPConfigError(ValueError):
     """Raised when MCP server configuration is invalid or incomplete."""
+
+
+class MCPPolicyError(MCPConfigError):
+    """Raised when a tool is incompatible with the configured server policy."""
+
+
+class MCPApprovalRequired(MCPConfigError):
+    """Raised when a tool call is valid but needs an explicit approval grant."""
+
+    def __init__(self, tool: "MCPToolDefinition", arguments_sha256: str) -> None:
+        super().__init__(f"Approval required for MCP tool {tool.qualified_name}")
+        self.tool = tool
+        self.arguments_sha256 = arguments_sha256
 
 
 class MCPServerConfig(BaseModel):
@@ -32,13 +53,13 @@ class MCPServerConfig(BaseModel):
     id: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9._-]+$")
     transport: Literal["streamable_http", "stdio"]
     enabled: bool = True
-    permission: Literal["read", "write", "destructive"] = "read"
+    permission: MCPPermission = "read"
 
     url: str | None = None
     command: str | None = None
     args: list[str] = Field(default_factory=list)
 
-    # Header name -> environment variable name.
+    # HTTP header name -> parent environment variable name.
     headers_env: dict[str, str] = Field(default_factory=dict)
 
     # Child-process environment name -> parent environment variable name.
@@ -51,16 +72,17 @@ class MCPServerSummary(BaseModel):
     id: str
     transport: str
     enabled: bool
-    permission: str
+    permission: MCPPermission
     configured: bool
 
 
 class MCPToolDefinition(BaseModel):
-    """Normalized MCP tool metadata used by the future agent/tool loop."""
+    """Normalized internal representation of an MCP tool."""
 
     server_id: str
     name: str
     qualified_name: str
+    model_name: str
     description: str | None
     input_schema: dict[str, Any]
     output_schema: dict[str, Any] | None
@@ -68,8 +90,53 @@ class MCPToolDefinition(BaseModel):
     destructive: bool | None
     idempotent: bool | None
     open_world: bool | None
-    permission: Literal["read", "write", "destructive"]
+    permission: MCPPermission
     requires_approval: bool
+
+
+class MCPToolSummary(BaseModel):
+    """Sanitized tool metadata exposed to the Android client."""
+
+    server_id: str
+    name: str
+    qualified_name: str
+    model_name: str
+    description: str | None
+    read_only: bool | None
+    destructive: bool | None
+    idempotent: bool | None
+    open_world: bool | None
+    permission: MCPPermission
+    requires_approval: bool
+
+
+class MCPApprovalGrant(BaseModel):
+    """Exact approval for one tool + canonical argument payload."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tool: str = Field(min_length=1, max_length=200)
+    arguments_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class MCPToolCallRequest(BaseModel):
+    """Gateway request for a direct MCP tool call."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tool: str = Field(min_length=1, max_length=200)
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    approval_grants: list[MCPApprovalGrant] = Field(default_factory=list)
+
+
+class MCPToolResult(BaseModel):
+    """Normalized JSON-safe MCP tool result."""
+
+    tool: str
+    is_error: bool
+    content: list[dict[str, Any]]
+    structured_content: Any | None = None
+    arguments_sha256: str
 
 
 def _annotation_value(annotations: Any, *names: str) -> bool | None:
@@ -98,11 +165,33 @@ def _annotation_value(annotations: Any, *names: str) -> bool | None:
     return None
 
 
-def normalize_mcp_tool(
-    server: MCPServerConfig,
-    tool: Any,
-) -> MCPToolDefinition:
-    """Convert an SDK Tool object to a stable, JSON-safe gateway definition."""
+def _model_function_name(server_id: str, tool_name: str) -> str:
+    """Create a stable OpenAI-compatible function name with a reverse mapping."""
+    raw = f"{server_id}__{tool_name}"
+    safe = re.sub(r"[^A-Za-z0-9_-]", "_", raw)
+    if len(safe) <= 64:
+        return safe
+
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:8]
+    return f"{safe[:55]}_{digest}"
+
+
+def canonical_arguments_sha256(arguments: dict[str, Any]) -> str:
+    """Hash canonical JSON so approvals bind to the exact call arguments."""
+    try:
+        encoded = json.dumps(
+            arguments,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise MCPConfigError("MCP tool arguments must be JSON serializable") from exc
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def normalize_mcp_tool(server: MCPServerConfig, tool: Any) -> MCPToolDefinition:
+    """Convert an SDK Tool object to stable JSON-safe gateway metadata."""
 
     name = str(getattr(tool, "name", "")).strip()
     if not name:
@@ -126,8 +215,7 @@ def normalize_mcp_tool(
     idempotent = _annotation_value(annotations, "idempotent_hint")
     open_world = _annotation_value(annotations, "open_world_hint")
 
-    # Safe default: unknown tool behavior is approval-gated, even on a read
-    # server. Only an explicitly read-only, non-destructive tool is automatic.
+    # Safe default: unknown behavior is never automatic.
     requires_approval = (
         server.permission != "read"
         or read_only is not True
@@ -138,6 +226,7 @@ def normalize_mcp_tool(
         server_id=server.id,
         name=name,
         qualified_name=f"{server.id}.{name}",
+        model_name=_model_function_name(server.id, name),
         description=getattr(tool, "description", None),
         input_schema=input_schema,
         output_schema=output_schema,
@@ -147,6 +236,23 @@ def normalize_mcp_tool(
         open_world=open_world,
         permission=server.permission,
         requires_approval=requires_approval,
+    )
+
+
+def to_client_summary(tool: MCPToolDefinition) -> MCPToolSummary:
+    """Strip schemas and all server credential/configuration details."""
+    return MCPToolSummary(
+        server_id=tool.server_id,
+        name=tool.name,
+        qualified_name=tool.qualified_name,
+        model_name=tool.model_name,
+        description=tool.description,
+        read_only=tool.read_only,
+        destructive=tool.destructive,
+        idempotent=tool.idempotent,
+        open_world=tool.open_world,
+        permission=tool.permission,
+        requires_approval=tool.requires_approval,
     )
 
 
@@ -163,8 +269,6 @@ def parse_mcp_servers(raw: str | None) -> list[MCPServerConfig]:
         return []
 
     try:
-        import json
-
         value = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise MCPConfigError("MCP_SERVERS_JSON is not valid JSON") from exc
@@ -173,7 +277,9 @@ def parse_mcp_servers(raw: str | None) -> list[MCPServerConfig]:
         value = value.get("servers")
 
     if not isinstance(value, list):
-        raise MCPConfigError("MCP_SERVERS_JSON must be a list or an object with a 'servers' list")
+        raise MCPConfigError(
+            "MCP_SERVERS_JSON must be a list or an object with a 'servers' list"
+        )
 
     try:
         servers = [MCPServerConfig.model_validate(item) for item in value]
@@ -224,7 +330,7 @@ class MCPRegistry:
     def _resolve_env_refs(refs: dict[str, str], *, scope: str) -> dict[str, str]:
         resolved: dict[str, str] = {}
         for target_name, env_name in refs.items():
-            value = __import__("os").environ.get(env_name)
+            value = environ.get(env_name)
             if not value:
                 raise MCPConfigError(
                     f"Missing environment variable {env_name!r} required by MCP {scope}"
@@ -236,7 +342,9 @@ class MCPRegistry:
     async def _connect(self, server: MCPServerConfig):
         if server.transport == "stdio":
             if not server.command:
-                raise MCPConfigError(f"MCP stdio server {server.id!r} requires 'command'")
+                raise MCPConfigError(
+                    f"MCP stdio server {server.id!r} requires 'command'"
+                )
 
             environment = self._resolve_env_refs(
                 server.env_vars,
@@ -266,7 +374,10 @@ class MCPRegistry:
             return
 
         async with httpx2.AsyncClient(headers=headers) as http_client:
-            transport = streamable_http_client(server.url, http_client=http_client)
+            transport = streamable_http_client(
+                server.url,
+                http_client=http_client,
+            )
             async with Client(transport) as client:
                 yield client
 
@@ -283,3 +394,101 @@ class MCPRegistry:
                 continue
             tools.extend(await self.list_tools(server.id))
         return tools
+
+    async def resolve_tool(self, tool_ref: str) -> MCPToolDefinition:
+        """Resolve either model function name or server.tool qualified name."""
+        tools = await self.list_all_tools()
+        for tool in tools:
+            if tool_ref in {tool.model_name, tool.qualified_name}:
+                return tool
+        raise MCPConfigError(f"Unknown MCP tool: {tool_ref}")
+
+    @staticmethod
+    def _validate_arguments(tool: MCPToolDefinition, arguments: dict[str, Any]) -> None:
+        try:
+            Draft202012Validator.check_schema(tool.input_schema)
+            validator = Draft202012Validator(tool.input_schema)
+            errors = sorted(
+                validator.iter_errors(arguments),
+                key=lambda error: list(error.path),
+            )
+        except Exception as exc:
+            raise MCPConfigError(
+                f"Tool {tool.qualified_name} has an invalid input schema"
+            ) from exc
+
+        if errors:
+            details = "; ".join(error.message for error in errors[:5])
+            raise MCPConfigError(
+                f"Invalid arguments for {tool.qualified_name}: {details}"
+            )
+
+    @staticmethod
+    def _is_approved(
+        tool: MCPToolDefinition,
+        arguments_sha256: str,
+        grants: list[MCPApprovalGrant],
+    ) -> bool:
+        return any(
+            grant.tool in {tool.model_name, tool.qualified_name}
+            and grant.arguments_sha256 == arguments_sha256
+            for grant in grants
+        )
+
+    @staticmethod
+    def _enforce_policy(
+        tool: MCPToolDefinition,
+        *,
+        arguments_sha256: str,
+        grants: list[MCPApprovalGrant],
+    ) -> None:
+        # A read-only server policy is a hard upper bound, not a UI hint.
+        if tool.permission == "read" and tool.read_only is not True:
+            raise MCPPolicyError(
+                f"Tool {tool.qualified_name} is not explicitly read-only; "
+                "read-only MCP server policy blocks execution"
+            )
+
+        if tool.requires_approval and not MCPRegistry._is_approved(
+            tool,
+            arguments_sha256,
+            grants,
+        ):
+            raise MCPApprovalRequired(tool, arguments_sha256)
+
+    @staticmethod
+    def _serialize_content(content: Any) -> dict[str, Any]:
+        if isinstance(content, dict):
+            return content
+        model_dump = getattr(content, "model_dump", None)
+        if callable(model_dump):
+            return model_dump(by_alias=True, exclude_none=True)
+        return {"type": "unknown", "value": str(content)}
+
+    async def call_tool(
+        self,
+        request: MCPToolCallRequest,
+    ) -> MCPToolResult:
+        tool = await self.resolve_tool(request.tool)
+        self._validate_arguments(tool, request.arguments)
+        arguments_sha256 = canonical_arguments_sha256(request.arguments)
+        self._enforce_policy(
+            tool,
+            arguments_sha256=arguments_sha256,
+            grants=request.approval_grants,
+        )
+
+        async with self._connect(self.get_server(tool.server_id)) as client:
+            result = await client.call_tool(tool.name, request.arguments)
+
+        content = [self._serialize_content(item) for item in result.content]
+        structured_content = getattr(result, "structured_content", None)
+        is_error = bool(getattr(result, "is_error", False))
+
+        return MCPToolResult(
+            tool=tool.qualified_name,
+            is_error=is_error,
+            content=content,
+            structured_content=structured_content,
+            arguments_sha256=arguments_sha256,
+        )
