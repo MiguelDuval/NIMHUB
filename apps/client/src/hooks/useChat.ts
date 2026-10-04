@@ -159,6 +159,7 @@ export function useChat({
           if (!signal.aborted && isMountedRef.current) {
             setStatus('success');
             onCompleteRef.current?.(response, assistantMessageId);
+            assistantMessageIdRef.current = undefined;
             retryCountRef.current = 0;
             return response;
           }
@@ -181,7 +182,6 @@ export function useChat({
         setError(apiError);
         setStatus('error');
         onErrorRef.current?.(apiError, assistantMessageId);
-        assistantMessageIdRef.current = undefined;
       }
     },
     [modelId]
