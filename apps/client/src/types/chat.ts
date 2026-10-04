@@ -97,6 +97,13 @@ export interface Conversation {
   createdAt: string;
   updatedAt: string;
   messageCount: number;
+  lastMessagePreview?: string;
+  // Rich conversation metadata
+  pinned?: boolean;
+  archived?: boolean;
+  tags?: string[];
+  systemPrompt?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface StoredMessage {
@@ -108,6 +115,10 @@ export interface StoredMessage {
   tool_calls?: ChatToolCall[];
   tool_call_id?: string;
   name?: string;
+  // Rich message metadata
+  metadata?: Record<string, unknown>;
+  tokenCount?: number;
+  finishReason?: 'stop' | 'length' | 'tool_calls' | 'content_filter' | null;
 }
 
 export interface ConversationSummary {
@@ -118,4 +129,8 @@ export interface ConversationSummary {
   updatedAt: string;
   messageCount: number;
   lastMessagePreview?: string;
+  // Rich conversation metadata
+  pinned?: boolean;
+  archived?: boolean;
+  tags?: string[];
 }

@@ -7,13 +7,13 @@ import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { Conversation, StoredMessage, ConversationSummary } from '../types';
 
 const DB_NAME = 'nim-hub';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 interface NIMHubDB extends DBSchema {
   conversations: {
     key: string;
     value: Conversation;
-    indexes: { 'by-updatedAt': string };
+    indexes: { 'by-updatedAt': string; 'by-pinned': string; 'by-archived': string };
   };
   messages: {
     key: string;
@@ -28,15 +28,25 @@ async function getDB(): Promise<IDBPDatabase<NIMHubDB>> {
   if (dbInstance) return dbInstance;
 
   dbInstance = await openDB<NIMHubDB>(DB_NAME, DB_VERSION, {
-    upgrade(db) {
+    upgrade(db, oldVersion, newVersion, transaction) {
       // Conversations store
-      const convStore = db.createObjectStore('conversations', { keyPath: 'id' });
-      convStore.createIndex('by-updatedAt', 'updatedAt');
+      if (oldVersion < 1) {
+        const convStore = db.createObjectStore('conversations', { keyPath: 'id' });
+        convStore.createIndex('by-updatedAt', 'updatedAt');
+      } else {
+        const convStore = transaction.objectStore('conversations');
+        if (oldVersion < 2) {
+          convStore.createIndex('by-pinned', 'pinned');
+          convStore.createIndex('by-archived', 'archived');
+        }
+      }
 
       // Messages store
-      const msgStore = db.createObjectStore('messages', { keyPath: 'id' });
-      msgStore.createIndex('by-conversationId', 'conversationId');
-      msgStore.createIndex('by-createdAt', 'createdAt');
+      if (oldVersion < 1) {
+        const msgStore = db.createObjectStore('messages', { keyPath: 'id' });
+        msgStore.createIndex('by-conversationId', 'conversationId');
+        msgStore.createIndex('by-createdAt', 'createdAt');
+      }
     },
   });
 
@@ -72,21 +82,30 @@ export const storage = {
       createdAt: nowISO(),
       updatedAt: nowISO(),
       messageCount: 0,
+      pinned: false,
+      archived: false,
+      tags: [],
     };
     await db.put('conversations', conversation);
     return conversation;
   },
 
   /**
-   * Get all conversations sorted by updatedAt desc
+   * Get all conversations sorted by updatedAt desc (pinned first, then by updatedAt)
    */
   async getConversations(): Promise<ConversationSummary[]> {
     const db = await getDB();
-    const conversations = await db.getAllFromIndex('conversations', 'by-updatedAt');
-    // Reverse to get newest first
+    const conversations = await db.getAll('conversations');
+    // Sort: pinned first, then by updatedAt desc
     return conversations
       .slice()
-      .reverse()
+      .sort((a, b) => {
+        // Pinned conversations first
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+        // Then by updatedAt desc
+        return b.updatedAt.localeCompare(a.updatedAt);
+      })
       .map((c) => ({
         id: c.id,
         title: c.title,
@@ -94,6 +113,10 @@ export const storage = {
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
         messageCount: c.messageCount,
+        lastMessagePreview: c.lastMessagePreview,
+        pinned: c.pinned,
+        archived: c.archived,
+        tags: c.tags,
       }));
   },
 
@@ -108,13 +131,40 @@ export const storage = {
   /**
    * Update conversation metadata
    */
-  async updateConversation(id: string, updates: Partial<Pick<Conversation, 'title' | 'modelId'>>): Promise<void> {
+  async updateConversation(
+    id: string,
+    updates: Partial<Pick<Conversation, 'title' | 'modelId' | 'pinned' | 'archived' | 'tags' | 'systemPrompt' | 'metadata'>>
+  ): Promise<void> {
     const db = await getDB();
     const conversation = await db.get('conversations', id);
     if (!conversation) return;
 
     const updated = { ...conversation, ...updates, updatedAt: nowISO() };
     await db.put('conversations', updated);
+  },
+
+  /**
+   * Toggle conversation pinned status
+   */
+  async togglePinned(id: string): Promise<void> {
+    const db = await getDB();
+    const conversation = await db.get('conversations', id);
+    if (!conversation) return;
+    conversation.pinned = !conversation.pinned;
+    conversation.updatedAt = nowISO();
+    await db.put('conversations', conversation);
+  },
+
+  /**
+   * Toggle conversation archived status
+   */
+  async toggleArchived(id: string): Promise<void> {
+    const db = await getDB();
+    const conversation = await db.get('conversations', id);
+    if (!conversation) return;
+    conversation.archived = !conversation.archived;
+    conversation.updatedAt = nowISO();
+    await db.put('conversations', conversation);
   },
 
   /**
