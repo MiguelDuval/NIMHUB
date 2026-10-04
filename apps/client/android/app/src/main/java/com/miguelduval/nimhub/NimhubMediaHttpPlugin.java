@@ -42,7 +42,7 @@ public class NimhubMediaHttpPlugin extends Plugin {
         output.write(CRLF.getBytes(StandardCharsets.UTF_8));
     }
 
-    private void writeFilePart(OutputStream output, String boundary, String base64, String fileName, String mimeType) throws Exception {
+    private void writeFilePart(OutputStream output, String boundary, String base64, String fieldName, String fileName, String mimeType) throws Exception {
         output.write((TWO_HYPHENS + boundary + CRLF).getBytes(StandardCharsets.UTF_8));
         output.write(("Content-Disposition: form-data; name=\"" + safeHeaderValue(fieldName) + "\"; filename=\"" + safeHeaderValue(fileName) + "\"" + CRLF).getBytes(StandardCharsets.UTF_8));
         output.write(("Content-Type: " + safeHeaderValue(mimeType) + CRLF).getBytes(StandardCharsets.UTF_8));
