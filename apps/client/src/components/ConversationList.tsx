@@ -42,7 +42,7 @@ export function ConversationList({
           <div className="conversation-info">
             <div className="conversation-title">{conv.title}</div>
             <div className="conversation-meta">
-              <span className="model-badge">{conv.modelId}</span>
+              <span className="model-badge">{conv.modelId || "Not configured"}</span>
               <span className="time">{formatTime(conv.updatedAt)}</span>
             </div>
           </div>
