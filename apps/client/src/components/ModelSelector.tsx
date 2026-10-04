@@ -1,4 +1,6 @@
+import { useState, useMemo } from 'react';
 import type { ModelCapabilityInfo } from '../types';
+import { sortModels, isVerifiedModel, getCapabilitySource } from '../services/models';
 
 interface ModelSelectorProps {
   models: ModelCapabilityInfo[];
@@ -7,6 +9,8 @@ interface ModelSelectorProps {
   disabled?: boolean;
   showDetails?: boolean;
   onToggleDetails?: () => void;
+  /** Filter to only show models with specific capability */
+  filterCapability?: ModelCapabilityInfo['capabilities'][number];
 }
 
 export function ModelSelector({
@@ -16,27 +20,64 @@ export function ModelSelector({
   disabled,
   showDetails,
   onToggleDetails,
+  filterCapability,
 }: ModelSelectorProps) {
   const selectedModel = models.find((m) => m.id === selectedModelId);
+  const [search, setSearch] = useState('');
+
+  // Sort and filter models
+  const availableModels = useMemo(() => {
+    let filtered = sortModels(models);
+
+    if (filterCapability) {
+      filtered = filtered.filter((m) => m.capabilities.includes(filterCapability));
+    }
+
+    if (search.trim()) {
+      const query = search.toLowerCase();
+      filtered = filtered.filter(
+        (m) =>
+          (m.name ?? m.id).toLowerCase().includes(query) ||
+          m.id.toLowerCase().includes(query)
+      );
+    }
+
+    return filtered;
+  }, [models, filterCapability, search]);
 
   return (
     <div className="model-selector-wrapper">
+      <div className="model-selector-search">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search models…"
+          disabled={disabled}
+          className="model-search-input"
+        />
+      </div>
       <select
         id="model-select"
         value={selectedModelId}
         onChange={(e) => onChange(e.target.value)}
-        disabled={disabled}
+        disabled={disabled || availableModels.length === 0}
         className="model-select"
       >
-        {models.length === 0 ? (
-          <option value="">Loading models…</option>
+        {availableModels.length === 0 ? (
+          <option value="">No models available</option>
         ) : (
-          models.map((model) => (
+          availableModels.map((model) => (
             <option key={model.id} value={model.id}>
               {model.name ?? model.id}
               {model.capabilities.includes('reasoning') && ' 🧠'}
               {model.capabilities.includes('vision') && ' 👁️'}
               {model.capabilities.includes('tool-calling') && ' 🔧'}
+              {model.capabilities.includes('image-generation') && ' 🎨'}
+              {model.capabilities.includes('video-generation') && ' 🎬'}
+              {model.capabilities.includes('asr') && ' 🎤'}
+              {model.capabilities.includes('tts') && ' 🔊'}
+              {isVerifiedModel(model) && ' ✓'}
             </option>
           ))
         )}
@@ -53,7 +94,25 @@ export function ModelSelector({
           </div>
           <div className="model-detail-row">
             <span className="label">Context:</span>
-            <span>{selectedModel.contextWindow ? `${(selectedModel.contextWindow / 1000).toFixed(0)}k` : 'Unknown'}</span>
+            <span>
+              {selectedModel.contextWindow
+                ? `${(selectedModel.contextWindow / 1000).toFixed(0)}k`
+                : 'Unknown'}
+            </span>
+          </div>
+          <div className="model-detail-row">
+            <span className="label">Max Output:</span>
+            <span>
+              {selectedModel.maxOutputTokens
+                ? `${(selectedModel.maxOutputTokens / 1000).toFixed(0)}k`
+                : 'Unknown'}
+            </span>
+          </div>
+          <div className="model-detail-row">
+            <span className="label">Source:</span>
+            <span className={`capability-source ${getCapabilitySource(selectedModel)}`}>
+              {getCapabilitySource(selectedModel)}
+            </span>
           </div>
           <div className="model-detail-row">
             <span className="label">Capabilities:</span>
@@ -62,6 +121,14 @@ export function ModelSelector({
                 <span key={c} className="capability-badge">{c}</span>
               ))}
             </span>
+          </div>
+          <div className="model-detail-row">
+            <span className="label">Input:</span>
+            <span>{selectedModel.inputModalities.join(', ')}</span>
+          </div>
+          <div className="model-detail-row">
+            <span className="label">Output:</span>
+            <span>{selectedModel.outputModalities.join(', ')}</span>
           </div>
           <div className="model-detail-row">
             <span className="label">Discovered:</span>
