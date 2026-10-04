@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../services/api';
 import { editImage, generateImage, generateVideo, synthesizeSpeech, transcribeAudio } from '../services/mediaApi';
 import { storage } from '../services/storage';
+import { getMediaModelDefinition, getMediaModelsForKind } from '../services/mediaCatalog';
+import { getMediaProviderConfig, setMediaProviderModel, type MediaProviderConfig } from '../services/mediaConfig';
 import type { ImageEditResponse, ImageGenerationResponse, VideoGenerationResponse } from '../types';
 
 export type MediaMode = 'image' | 'voice' | 'video';
@@ -57,11 +59,43 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
   const [videoSeconds, setVideoSeconds] = useState(4);
   const [imageSize, setImageSize] = useState('1024x1024');
   const [videoSize, setVideoSize] = useState('832x480');
+  const [mediaProfile, setMediaProfile] = useState<MediaProviderConfig | null>(null);
+  const [mediaModelId, setMediaModelId] = useState('');
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const artifactUrlRef = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const visualKind = mode === 'image' || mode === 'video' ? mode : null;
+  const mediaModels = useMemo(() => (visualKind ? getMediaModelsForKind(visualKind) : []), [visualKind]);
+  const selectedMediaModel = getMediaModelDefinition(mediaModelId);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!visualKind) { setMediaProfile(null); setMediaModelId(''); return; }
+    void getMediaProviderConfig(visualKind).then((profile) => {
+      if (cancelled) return;
+      setMediaProfile(profile);
+      const inCatalog = getMediaModelDefinition(profile.model) && mediaModels.some((item) => item.id === profile.model);
+      setMediaModelId(inCatalog ? profile.model : mediaModels[0]?.id ?? '');
+    }).catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load media profile'); });
+    return () => { cancelled = true; };
+  }, [visualKind, mediaModels]);
+
+  const handleMediaModelChange = async (nextId: string) => {
+    if (!visualKind) return;
+    const next = getMediaModelDefinition(nextId);
+    if (!next) return;
+    const previous = getMediaModelDefinition(mediaModelId);
+    const currentBase = mediaProfile?.baseUrl ?? '';
+    const baseWasKnownDefault = !currentBase || currentBase === previous?.defaultBaseUrl;
+    const nextBase = next.defaultBaseUrl || (baseWasKnownDefault ? '' : currentBase);
+    setMediaModelId(next.id);
+    setMediaProfile((current) => current ? { ...current, model: next.id, baseUrl: nextBase } : current);
+    try { await setMediaProviderModel(visualKind, next.id, nextBase); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Could not select media model'); }
+  };
 
   useEffect(() => () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -91,7 +125,7 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
     if (!prompt.trim()) return;
     setBusy(true); setError(null); clearArtifact();
     try {
-      const response = await generateImage({ model: '', prompt: prompt.trim(), size: imageSize, n: 1, response_format: 'b64_json' });
+      const response = await generateImage({ model: selectedMediaModel?.id ?? '', prompt: prompt.trim(), size: imageSize, n: 1, response_format: 'b64_json' });
       const base64 = firstBase64Image(response);
       if (!base64) throw new Error('Image endpoint returned no base64 image');
       await saveArtifact('image', base64ToBlob(base64, 'image/png'), 'nimhub-image.png');
@@ -104,7 +138,7 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
     setBusy(true); setError(null); clearArtifact();
     try {
       const response = await editImage({
-        model: '', prompt: prompt.trim(), image: referenceImage,
+        model: selectedMediaModel?.id ?? '', prompt: prompt.trim(), image: referenceImage,
         fileName: referenceImage.name, mimeType: referenceImage.type,
         n: 1, response_format: 'b64_json',
       });
@@ -177,7 +211,7 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
     setBusy(true); setError(null); clearArtifact();
     try {
       const inputReference = videoImage ? await fileToDataUrl(videoImage) : undefined;
-      const response = await generateVideo({ model: '', prompt: prompt.trim(), size: videoSize, seconds: videoSeconds, input_reference: inputReference });
+      const response = await generateVideo({ model: selectedMediaModel?.id ?? '', prompt: prompt.trim(), size: videoSize, seconds: videoSeconds, input_reference: inputReference });
       const base64 = firstBase64Video(response);
       if (!base64) throw new Error('Video endpoint returned no base64 video');
       await saveArtifact('video', base64ToBlob(base64, 'video/mp4'), 'nimhub-video.mp4');
@@ -188,10 +222,10 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
   if (mode === 'image') return (
     <div className="media-studio">
       <div className="media-studio-header">
-        <div><span className="settings-kicker">MEDIA STUDIO · IMAGE</span><h2>Generate or edit an image</h2><p>Uses the Image provider profile from Settings.</p></div>
+        <div><span className="settings-kicker">MEDIA STUDIO · IMAGE</span><h2>Generate or edit an image</h2><p>Only image-capable NVIDIA models appear here. Choose the target model before generating.</p></div>
         {!nvidiaConfigured && <button className="btn-primary" onClick={onOpenSettings}>Configure NVIDIA</button>}
       </div>
-      <label className="media-prompt-field"><span>Prompt</span><textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the image…" disabled={busy} /></label>
+      <section className="media-model-card"><label className="settings-field"><span>Model</span><select value={mediaModelId} onChange={(event) => void handleMediaModelChange(event.target.value)} disabled={busy}>{mediaModels.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.availability === "hosted" ? "Hosted" : "Self-hosted"}</option>)}</select></label>{selectedMediaModel && <div className="media-model-explainer"><strong>{selectedMediaModel.name}</strong><span>{selectedMediaModel.description}</span><span>Route: <code>{selectedMediaModel.defaultBaseUrl || "configure in Settings"}</code>{selectedMediaModel.endpoint}</span></div>}</section><section className="media-model-card"><label className="settings-field"><span>Model</span><select value={mediaModelId} onChange={(event) => void handleMediaModelChange(event.target.value)} disabled={busy}>{mediaModels.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.availability === "hosted" ? "Hosted" : "Self-hosted"}</option>)}</select></label>{selectedMediaModel && <div className="media-model-explainer"><strong>{selectedMediaModel.name}</strong><span>{selectedMediaModel.description}</span><span>Route: <code>{selectedMediaModel.defaultBaseUrl || "configure in Settings"}</code>{selectedMediaModel.endpoint}</span></div>}</section><label className="media-prompt-field"><span>Prompt</span><textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the image…" disabled={busy} /></label>
       <div className="media-control-grid">
         <label className="settings-field"><span>Size</span><select value={imageSize} onChange={(e) => setImageSize(e.target.value)} disabled={busy}><option>1024x1024</option><option>832x480</option><option>1280x720</option></select></label>
         <label className="settings-field"><span>Reference image for editing</span><input type="file" accept="image/*" onChange={(e) => setReferenceImage(e.target.files?.[0] ?? null)} disabled={busy} /></label>
@@ -232,7 +266,7 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
   return (
     <div className="media-studio">
       <div className="media-studio-header">
-        <div><span className="settings-kicker">MEDIA STUDIO · VIDEO</span><h2>Generate video</h2><p>Uses the Video provider profile from Settings.</p></div>
+        <div><span className="settings-kicker">MEDIA STUDIO · VIDEO</span><h2>Generate video</h2><p>Only video-capable NVIDIA models appear here. Choose the target model before generating.</p></div>
         {!nvidiaConfigured && <button className="btn-primary" onClick={onOpenSettings}>Configure NVIDIA</button>}
       </div>
       <label className="media-prompt-field"><span>Prompt</span><textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the video…" disabled={busy} /></label>
