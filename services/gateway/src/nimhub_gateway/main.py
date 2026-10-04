@@ -1,6 +1,8 @@
 import json
+import secrets
 
-from fastapi import FastAPI, HTTPException
+import httpx
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -15,7 +17,7 @@ from .mcp import (
     to_client_summary,
 )
 from .nvidia import NIMClient
-from .settings import settings
+from .settings import normalize_nvidia_base_url, persist_nvidia_settings, settings
 
 app = FastAPI(title="NIM Hub Gateway", version="0.1.0")
 
@@ -46,6 +48,18 @@ class ChatRequest(BaseModel):
     temperature: float | None = None
 
 
+class NvidiaSettingsRequest(BaseModel):
+    api_key: str
+    base_url: str
+
+
+class NvidiaSettingsResponse(BaseModel):
+    ok: bool
+    nvidia_configured: bool
+    nvidia_base_url: str
+    models_available: int
+
+
 def _mcp_error(exc: Exception, *, code: str, status: int) -> HTTPException:
     return HTTPException(
         status_code=status,
@@ -63,8 +77,111 @@ async def health() -> dict:
         "ok": True,
         "service": "nim-hub-gateway",
         "nvidia_configured": bool(settings.nvidia_api_key),
+        "nvidia_base_url": settings.nvidia_base_url,
+        "admin_configured": bool(settings.nim_hub_admin_token),
         "mcp_servers_configured": len(mcp_registry.server_summaries()),
     }
+
+
+@app.put("/api/settings/nvidia", response_model=NvidiaSettingsResponse)
+async def update_nvidia_settings(
+    request: NvidiaSettingsRequest,
+    admin_token: str | None = Header(default=None, alias="X-NIM-Hub-Admin-Token"),
+) -> NvidiaSettingsResponse:
+    configured_token = settings.nim_hub_admin_token
+    if not configured_token:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "NIM_HUB_ADMIN_NOT_CONFIGURED",
+                "message": "NIM_HUB_ADMIN_TOKEN is not configured on the gateway",
+                "retryable": False,
+            },
+        )
+    if not admin_token or not secrets.compare_digest(admin_token, configured_token):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "NIM_HUB_ADMIN_UNAUTHORIZED",
+                "message": "Gateway admin authorization failed",
+                "retryable": False,
+            },
+        )
+    if not request.api_key.strip():
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "NVIDIA_API_KEY_INVALID",
+                "message": "NVIDIA API key is required",
+                "retryable": False,
+            },
+        )
+
+    try:
+        base_url = normalize_nvidia_base_url(request.base_url)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "NVIDIA_BASE_URL_INVALID",
+                "message": str(exc),
+                "retryable": False,
+            },
+        ) from exc
+
+    try:
+        probe = await nim.list_models(
+            api_key=request.api_key.strip(),
+            base_url=base_url,
+        )
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code in {401, 403}:
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "code": "NVIDIA_AUTH_FAILED",
+                    "message": "NVIDIA API credentials were rejected",
+                    "retryable": False,
+                },
+            ) from exc
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "NVIDIA_VERIFY_FAILED",
+                "message": "Gateway could not verify the NVIDIA API endpoint",
+                "retryable": True,
+            },
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "NVIDIA_VERIFY_FAILED",
+                "message": "Gateway could not verify the NVIDIA API endpoint",
+                "retryable": True,
+            },
+        ) from exc
+
+    try:
+        persist_nvidia_settings(request.api_key.strip(), base_url)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "NVIDIA_SETTINGS_PERSIST_FAILED",
+                "message": "Gateway could not persist NVIDIA settings",
+                "retryable": False,
+            },
+        ) from exc
+
+    settings.nvidia_api_key = request.api_key.strip()
+    settings.nvidia_base_url = base_url
+    return NvidiaSettingsResponse(
+        ok=True,
+        nvidia_configured=True,
+        nvidia_base_url=base_url,
+        models_available=len(probe.get("data") or []),
+    )
 
 
 @app.get("/api/models")
