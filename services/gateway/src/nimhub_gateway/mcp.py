@@ -226,7 +226,6 @@ def normalize_mcp_tool(server: MCPServerConfig, tool: Any) -> MCPToolDefinition:
     else:
         required_permission = "write"
 
-    permission_rank = {"read": 0, "write": 1, "destructive": 2}
     requires_approval = required_permission != "read"
 
     return MCPToolDefinition(
@@ -449,7 +448,6 @@ class MCPRegistry:
         arguments_sha256: str,
         grants: list[MCPApprovalGrant],
     ) -> None:
-        permission_rank = {"read": 0, "write": 1, "destructive": 2}
         if tool.permission == "read" and tool.read_only is not True:
             raise MCPPolicyError(
                 f"Tool {tool.qualified_name} is not explicitly read-only; "
