@@ -82,6 +82,8 @@ export default function App() {
   const [retryCount, setRetryCount] = useState(0);
   const [agentMode, setAgentMode] = useState(false);
   const currentConversationRef = useRef(currentConversation);
+  const messagesAreaRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
 
   useEffect(() => {
     currentConversationRef.current = currentConversation;
@@ -91,6 +93,19 @@ export default function App() {
     () => models.find((m) => m.id === selectedModelId),
     [models, selectedModelId],
   );
+  const handleMessagesScroll = useCallback(() => {
+    const element = messagesAreaRef.current;
+    if (!element) return;
+    shouldAutoScrollRef.current =
+      element.scrollHeight - element.scrollTop - element.clientHeight < 120;
+  }, []);
+
+  useEffect(() => {
+    const element = messagesAreaRef.current;
+    if (!element || !shouldAutoScrollRef.current) return;
+    element.scrollTop = element.scrollHeight;
+  }, [chatMessages.length, streamingContent, agentStreamingText, agentApprovals.length]);
+
   const chatMessages = useMemo(
     (): ChatMessage[] => storedMessages.map(storedToChatMessage),
     [storedMessages],
@@ -535,7 +550,13 @@ export default function App() {
               </div>
             )}
 
-            <div className="messages-area" role="log" aria-live="polite">
+            <div
+              ref={messagesAreaRef}
+              className="messages-area"
+              role="log"
+              aria-live="polite"
+              onScroll={handleMessagesScroll}
+            >
               {chatMessages.length === 0 &&
                 streamingContent === '' &&
                 agentStreamingText === '' && (
