@@ -24,11 +24,11 @@ An Android versioning scheme can be added later inside the Android project. A ta
 
 ## First-time NVIDIA setup
 
-1. Start the gateway on the computer. Keep `NIM_HUB_HOST=127.0.0.1` for local-only use or explicitly bind a trusted LAN interface for a physical Android phone.
-2. Set a private `NIM_HUB_ADMIN_TOKEN` in the gateway environment.
-3. Open **NIM Hub Settings** in the APK and enter the gateway URL.
-4. Press **Test connection**.
-5. Enter the NVIDIA API key from Build.NVIDIA.com and the gateway admin token, then press **Connect NVIDIA**.
-6. The gateway verifies NVIDIA `/models` before saving the provider credentials. The client then refreshes model discovery; Chat becomes send-ready and Agent becomes available for models with tool-calling capability.
+1. Install the APK.
+2. Open **Settings** (the dedicated gear button is always visible in the top bar, and a first-run card also opens it).
+3. Enter the NVIDIA API key from Build.NVIDIA.com. The default base URL is `https://integrate.api.nvidia.com/v1`.
+4. Press **Test & save NVIDIA key**. The app verifies `/models` using Android native HTTP, then stores the key in Android Keystore-backed encrypted app storage.
+5. Refresh models or return to Chat. Core Chat/model discovery now works without a local GitHub checkout and without a running gateway.
+6. Configure the optional Personal Gateway only when Agent/MCP/GitHub or other server-side tools are needed.
 
-The NVIDIA provider key remains gateway-side. Never put it in the Android project or APK environment.
+The NVIDIA key is never committed to the repository, packaged into the APK, or stored in localStorage.
