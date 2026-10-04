@@ -61,6 +61,24 @@ function nowISO(): string {
   return new Date().toISOString();
 }
 
+function messagePreview(content: StoredMessage['content']): string {
+  if (typeof content === 'string') {
+    return content.trim().replace(/\s+/g, ' ').slice(0, 160);
+  }
+
+  if (Array.isArray(content)) {
+    const textPart = content.find(
+      (part) => part.type === 'text' && typeof part.text === 'string' && part.text.trim(),
+    );
+    if (textPart && textPart.type === 'text') {
+      return textPart.text.trim().replace(/\s+/g, ' ').slice(0, 160);
+    }
+    return 'Image attachment';
+  }
+
+  return '';
+}
+
 export const storage = {
   /**
    * Initialize the database
@@ -208,6 +226,12 @@ export const storage = {
     if (conversation) {
       conversation.messageCount += 1;
       conversation.updatedAt = nowISO();
+      if (role !== 'tool') {
+        const preview = messagePreview(content);
+        if (preview) {
+          conversation.lastMessagePreview = preview;
+        }
+      }
       await db.put('conversations', conversation);
     }
 
