@@ -189,10 +189,19 @@ class AgentRuntime:
         if not grants or not messages:
             return [], []
 
-        assistant = messages[-1]
-        if assistant.get("role") != "assistant":
+        assistant_index = next(
+            (
+                index
+                for index in range(len(messages) - 1, -1, -1)
+                if messages[index].get("role") == "assistant"
+                and messages[index].get("tool_calls")
+            ),
+            None,
+        )
+        if assistant_index is None:
             return [], []
 
+        assistant = messages[assistant_index]
         raw_calls = assistant.get("tool_calls") or []
         calls = [call for call in raw_calls if isinstance(call, dict)]
         if not calls:
@@ -200,7 +209,7 @@ class AgentRuntime:
 
         completed_call_ids = {
             str(message.get("tool_call_id"))
-            for message in messages
+            for message in messages[assistant_index + 1:]
             if message.get("role") == "tool" and message.get("tool_call_id")
         }
 
