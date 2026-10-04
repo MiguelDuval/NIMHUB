@@ -26,6 +26,27 @@ function normalizeBaseUrl(value: string): string {
   return parsed.toString().replace(/\/$/, '');
 }
 
+/**
+ * Accept the actual NVIDIA token as well as common copied/labelled forms such as:
+ * "NVAPI - nvapi-...", "NVAPI nvapi-..." and "Bearer nvapi-...".
+ * The stored value is always the raw nvapi-... token.
+ */
+export function normalizeNvidiaApiKey(value: string): string {
+  let key = value.trim().replace(/^['"]|['"]$/g, '').trim();
+  key = key.replace(/^Bearer\s+/i, '').trim();
+
+  const labelled = key.match(/^NVAPI\s*(?:[-:=]\s*)?(.+)$/i);
+  if (labelled && /^nvapi-/i.test(labelled[1].trim())) {
+    key = labelled[1].trim();
+  }
+
+  if (!/^nvapi-/i.test(key)) {
+    throw new Error('NVIDIA API key must start with nvapi-');
+  }
+
+  return key;
+}
+
 export function getNvidiaBaseUrl(): string {
   if (typeof window === 'undefined') return DEFAULT_NVIDIA_BASE_URL;
   const stored = window.localStorage.getItem(NVIDIA_BASE_URL_STORAGE);
@@ -49,10 +70,9 @@ export async function hasNvidiaApiKey(): Promise<boolean> {
 }
 
 export async function saveNvidiaConfig(apiKey: string, baseUrl: string): Promise<void> {
-  const key = apiKey.trim();
-  if (!key) throw new Error('NVIDIA API key is required');
-
+  const key = normalizeNvidiaApiKey(apiKey);
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+
   if (!Capacitor.isNativePlatform()) {
     throw new Error('NVIDIA API credentials can be stored only in the native Android app');
   }
