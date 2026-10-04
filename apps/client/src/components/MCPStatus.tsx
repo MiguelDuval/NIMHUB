@@ -98,7 +98,7 @@ export function MCPStatus({
                         {permissionLabel(server.permission)}
                       </span>
                       <span className={server.enabled && server.configured ? 'mcp-ready' : 'mcp-disabled'}>
-                        {server.enabled && server.configured ? 'ready' : 'disabled'}
+                        {server.enabled && server.configured ? 'configured' : 'disabled'}
                       </span>
                     </div>
                   </div>
