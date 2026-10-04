@@ -101,11 +101,15 @@ export const api = {
   /**
    * Streaming chat completion using SSE
    */
-  async *chatStream(request: ChatCompletionRequest): AsyncGenerator<ChatCompletionChunk, void, unknown> {
+  async *chatStream(
+    request: ChatCompletionRequest,
+    signal?: AbortSignal,
+  ): AsyncGenerator<ChatCompletionChunk, void, unknown> {
     const response = await fetch(`${getGatewayUrl()}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...request, stream: true }),
+      signal,
     });
 
     if (!response.ok) {
