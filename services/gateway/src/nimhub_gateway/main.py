@@ -229,11 +229,15 @@ async def chat(
     try:
         if request.stream:
             return StreamingResponse(
-                nim.chat_stream(payload, api_key=nvidia_api_key),
+                nim.chat_stream(payload, api_key=nvidia_api_key)
+                if nvidia_api_key is not None
+                else nim.chat_stream(payload),
                 media_type="text/event-stream",
                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
             )
-        return await nim.chat(payload, api_key=nvidia_api_key)
+        if nvidia_api_key is not None:
+            return await nim.chat(payload, api_key=nvidia_api_key)
+        return await nim.chat(payload)
     except RuntimeError as exc:
         raise HTTPException(
             status_code=503,
@@ -321,10 +325,12 @@ async def agent(
     if request.stream:
         async def event_stream():
             try:
-                async for event in agent_runtime.stream(
-                    request,
-                    api_key=nvidia_api_key,
-                ):
+                stream = (
+                    agent_runtime.stream(request, api_key=nvidia_api_key)
+                    if nvidia_api_key is not None
+                    else agent_runtime.stream(request)
+                )
+                async for event in stream:
                     yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
             except MCPConfigError as exc:
                 yield (
@@ -363,7 +369,9 @@ async def agent(
         )
 
     try:
-        return await agent_runtime.run(request, api_key=nvidia_api_key)
+        if nvidia_api_key is not None:
+            return await agent_runtime.run(request, api_key=nvidia_api_key)
+        return await agent_runtime.run(request)
     except MCPConfigError as exc:
         raise _mcp_error(exc, code="MCP_AGENT_FAILED", status=400) from exc
     except Exception as exc:
