@@ -1,8 +1,45 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { api } from './api';
+import { normalizeGatewayUrl } from './gatewayConfig';
 
 describe('MCP gateway API', () => {
+  it('uses the persisted gateway URL for requests', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          service: 'nim-hub-gateway',
+          nvidia_configured: false,
+          mcp_servers_configured: 0,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const storage = {
+      getItem: vi.fn().mockReturnValue('http://192.168.1.20:8787/'),
+      setItem: vi.fn(),
+    };
+
+    vi.stubGlobal('window', {
+      localStorage: storage,
+      dispatchEvent: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(normalizeGatewayUrl('http://192.168.1.20:8787/')).toBe('http://192.168.1.20:8787');
+    await api.health();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://192.168.1.20:8787/api/health',
+    );
+
+    vi.unstubAllGlobals();
+  });
+
   it('lists sanitized MCP servers', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
