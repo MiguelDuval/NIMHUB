@@ -36,6 +36,36 @@ describe('MCP gateway API', () => {
     );
   });
 
+  it('lists sanitized MCP tool metadata', async () => {
+    const tools = [
+      {
+        server_id: 'deterministic',
+        name: 'deterministic_echo',
+        qualified_name: 'deterministic.deterministic_echo',
+        model_name: 'deterministic__deterministic_echo',
+        description: 'Echo a value.',
+        read_only: true,
+        destructive: false,
+        idempotent: true,
+        open_world: false,
+        permission: 'read',
+        requires_approval: false,
+      },
+    ];
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ tools }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(api.listMCPTools()).resolves.toEqual(tools);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:8787/api/mcp/tools',
+    );
+  });
+
   it('calls an MCP tool through the gateway', async () => {
     const response = {
       tool: 'deterministic.deterministic_echo',
