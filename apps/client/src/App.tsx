@@ -104,6 +104,50 @@ export default function App() {
     },
   });
 
+  const persistAgentMessages = useCallback(
+    async (messagesToPersist: import('./types').ChatMessage[]) => {
+      if (!currentConversation) return;
+      for (const message of messagesToPersist) {
+        await addMessage(
+          currentConversation.id,
+          message.role,
+          message.content,
+          {
+            tool_calls: message.tool_calls,
+            tool_call_id: message.tool_call_id,
+            name: message.name,
+          },
+        );
+      }
+    },
+    [addMessage, currentConversation],
+  );
+
+  const {
+    status: agentStatus,
+    error: agentError,
+    approvals: agentApprovals,
+    run: runAgent,
+    approve: approveAgent,
+    reject: rejectAgent,
+    reset: resetAgent,
+  } = useAgent({
+    modelId: selectedModelId,
+    onMessages: persistAgentMessages,
+  });
+
+  const canUseAgent = selectedModel?.capabilities.includes('tool-calling') ?? false;
+  const effectiveBusy =
+    status === 'streaming' ||
+    status === 'pending' ||
+    agentStatus === 'running';
+
+  const agentDisplayError = agentError
+    ? [agentError.message, agentError.code].filter(Boolean).join(' · ')
+    : null;
+
+
+
   const handleSend = useCallback(async () => {
     const text = inputMessage.trim();
     if (!text && attachments.length === 0) return;
@@ -188,48 +232,34 @@ export default function App() {
   }, [abort]);
 
 
-  const persistAgentMessages = useCallback(
-    async (messagesToPersist: import('./types').ChatMessage[]) => {
-      if (!currentConversation) return;
-      for (const message of messagesToPersist) {
-        await addMessage(
-          currentConversation.id,
-          message.role,
-          message.content,
-          {
-            tool_calls: message.tool_calls,
-            tool_call_id: message.tool_call_id,
-            name: message.name,
-          },
-        );
-      }
-    },
-    [addMessage, currentConversation],
+
+  const canSend = useMemo(
+    () =>
+      Boolean(inputMessage.trim() || attachments.length > 0) &&
+      Boolean(selectedModelId) &&
+      !effectiveBusy &&
+      !(agentMode && agentStatus === 'approval_required') &&
+      (agentMode
+        ? canUseAgent
+        : status === 'idle' || status === 'success' || status === 'error'),
+    [
+      inputMessage,
+      attachments.length,
+      selectedModelId,
+      effectiveBusy,
+      agentMode,
+      agentStatus,
+      canUseAgent,
+      status,
+    ],
   );
 
-  const {
-    status: agentStatus,
-    error: agentError,
-    approvals: agentApprovals,
-    run: runAgent,
-    approve: approveAgent,
-    reject: rejectAgent,
-    reset: resetAgent,
-  } = useAgent({
-    modelId: selectedModelId,
-    onMessages: persistAgentMessages,
-  });
-
-  const canUseAgent = selectedModel?.capabilities.includes('tool-calling') ?? false;
-  const effectiveBusy =
-    status === 'streaming' ||
-    status === 'pending' ||
-    agentStatus === 'running';
-
-  const agentDisplayError = agentError
-    ? [agentError.message, agentError.code].filter(Boolean).join(' · ')
-    : null;
-
+  useEffect(() => {
+    if (agentMode && !canUseAgent) {
+      setAgentMode(false);
+      resetAgent();
+    }
+  }, [agentMode, canUseAgent, resetAgent]);
 
   const isLoading = conversationsLoading || modelsLoading;
   const allErrors = [modelsError, attachmentError, chatError].filter(Boolean) as Error[];
@@ -253,6 +283,18 @@ export default function App() {
           <h1>NIM Hub</h1>
         </div>
         <div className="topbar-center">
+          <button
+            className={'mode-toggle ' + (agentMode ? 'active' : '')}
+            onClick={() => setAgentMode((enabled) => !enabled)}
+            disabled={!canUseAgent || effectiveBusy}
+            title={
+              canUseAgent
+                ? 'Toggle model-driven MCP agent mode'
+                : 'Selected model does not advertise tool-calling'
+            }
+          >
+            {agentMode ? 'Agent ON' : 'Agent'}
+          </button>
           <ModelSelector
             models={models}
             selectedModelId={selectedModelId}
@@ -380,6 +422,22 @@ export default function App() {
               )}
             </div>
 
+            {agentApprovals.length > 0 && (
+              <AgentApprovalCard
+                approvals={agentApprovals}
+                onApprove={approveAgent}
+                onReject={rejectAgent}
+                busy={agentStatus === 'running'}
+              />
+            )}
+
+            {agentDisplayError && (
+              <div className="agent-error" role="alert">
+                <strong>Agent error</strong>
+                <span>{agentDisplayError}</span>
+              </div>
+            )}
+
             <Composer
               inputMessage={inputMessage}
               onInputChange={setInputMessage}
@@ -388,8 +446,8 @@ export default function App() {
               onAbort={handleAbort}
               attachments={attachments}
               onRemoveAttachment={removeImage}
-              disabled={!selectedModelId}
-              streaming={status === 'streaming'}
+              disabled={!selectedModelId || (agentMode && !canUseAgent)}
+              streaming={status === 'streaming' || agentStatus === 'running'}
               canSend={canSend}
               visionEnabled={selectedModel?.capabilities.includes('vision') ?? false}
             />
