@@ -72,7 +72,6 @@ export default function App() {
     status: gatewayStatus,
     error: gatewayError,
     nvidiaConfigured,
-    refresh: refreshGateway,
     updateUrl: updateGatewayUrl,
   } = useGatewayStatus();
 
@@ -492,11 +491,6 @@ export default function App() {
               await refreshMCP();
             }}
             onTest={(nextUrl) => api.healthAt(nextUrl)}
-            onRefresh={async () => {
-              await refreshGateway();
-              await refreshModels();
-              await refreshMCP();
-            }}
           />
           <div className={"status-indicator " + statusClass}>
             <span className="status-dot"></span>
