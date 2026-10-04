@@ -4,8 +4,6 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.util.Base64;
 
-import androidx.annotation.NonNull;
-
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -116,13 +114,25 @@ public class SecureStoragePlugin extends Plugin {
             return;
         }
 
+        String stored = prefs().getString(key, null);
+        JSObject result = new JSObject();
+
+        if (stored == null) {
+            result.put("value", JSONObject.NULL);
+            call.resolve(result);
+            return;
+        }
+
         try {
-            String stored = prefs().getString(key, null);
-            JSObject result = new JSObject();
-            result.put("value", stored == null ? JSONObject.NULL : decrypt(stored));
+            result.put("value", decrypt(stored));
             call.resolve(result);
         } catch (Exception e) {
-            call.reject("Unable to read secure value");
+            // The ciphertext may outlive its Keystore key after an incompatible
+            // restore/reinstall. Treat it as absent so the UI can recover by
+            // asking for a fresh key instead of becoming permanently wedged.
+            prefs().edit().remove(key).apply();
+            result.put("value", JSONObject.NULL);
+            call.resolve(result);
         }
     }
 
@@ -134,8 +144,22 @@ public class SecureStoragePlugin extends Plugin {
             return;
         }
 
+        String stored = prefs().getString(key, null);
+        boolean configured = false;
+
+        if (stored != null) {
+            try {
+                // Verify that the value is actually decryptable. A preference
+                // entry alone is not enough to claim a usable credential.
+                decrypt(stored);
+                configured = true;
+            } catch (Exception e) {
+                prefs().edit().remove(key).apply();
+            }
+        }
+
         JSObject result = new JSObject();
-        result.put("value", prefs().contains(key));
+        result.put("value", configured);
         call.resolve(result);
     }
 
