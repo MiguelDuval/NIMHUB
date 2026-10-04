@@ -5,7 +5,7 @@ interface ComposerProps {
   inputMessage: string;
   onInputChange: (value: string) => void;
   onSend: () => void;
-  onAttach: () => void;
+  onAddImage: (file: File) => void;
   onAbort: () => void;
   attachments: ImageAttachment[];
   onRemoveAttachment: (id: string) => void;
@@ -20,7 +20,7 @@ export function Composer({
   inputMessage,
   onInputChange,
   onSend,
-  onAttach,
+  onAddImage,
   onAbort,
   attachments,
   onRemoveAttachment,
@@ -47,12 +47,11 @@ export function Composer({
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (file) {
-        const event = new CustomEvent('nimhub:add-image', { detail: file });
-        window.dispatchEvent(event);
+        onAddImage(file);
       }
       e.target.value = '';
     },
-    []
+    [onAddImage]
   );
 
   return (
@@ -61,8 +60,8 @@ export function Composer({
         <button
           className="attach-btn"
           onClick={() => fileInputRef.current?.click()}
-          disabled={disabled || streaming}
-          title="Attach image"
+          disabled={disabled || streaming || !visionEnabled}
+          title={visionEnabled ? 'Attach image' : 'Selected model does not support image input'}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
