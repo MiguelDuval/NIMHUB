@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GatewayConnectionStatus } from '../hooks/useGatewayStatus';
+import type { HealthResponse } from '../types';
 import { getDefaultGatewayUrl } from '../services/gatewayConfig';
 
 interface GatewaySettingsProps {
@@ -8,6 +9,7 @@ interface GatewaySettingsProps {
   nvidiaConfigured: boolean | null;
   error: Error | null;
   onSave: (value: string) => Promise<void>;
+  onTest: (value: string) => Promise<HealthResponse>;
   onRefresh: () => Promise<void>;
 }
 
@@ -27,12 +29,15 @@ export function GatewaySettings({
   nvidiaConfigured,
   error,
   onSave,
+  onTest,
   onRefresh,
 }: GatewaySettingsProps) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(url);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -53,9 +58,10 @@ export function GatewaySettings({
   }, [open]);
 
   const handleSave = async () => {
-    if (saving) return;
+    if (saving || testing) return;
     setSaving(true);
     setLocalError(null);
+    setTestResult(null);
     try {
       await onSave(draft);
       setOpen(false);
@@ -66,9 +72,29 @@ export function GatewaySettings({
     }
   };
 
+  const handleTest = async () => {
+    if (saving || testing) return;
+    setTesting(true);
+    setLocalError(null);
+    setTestResult(null);
+    try {
+      const health = await onTest(draft);
+      setTestResult(
+        health.nvidia_configured
+          ? 'Connection successful · NVIDIA key configured'
+          : 'Connection successful · NVIDIA key missing',
+      );
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : 'Gateway test failed');
+    } finally {
+      setTesting(false);
+    }
+  };
+
   const handleReset = () => {
     setDraft(getDefaultGatewayUrl());
     setLocalError(null);
+    setTestResult(null);
   };
 
   return (
@@ -105,7 +131,11 @@ export function GatewaySettings({
             <span>Gateway URL</span>
             <input
               value={draft}
-              onChange={(event) => setDraft(event.target.value)}
+              onChange={(event) => {
+                setDraft(event.target.value);
+                setLocalError(null);
+                setTestResult(null);
+              }}
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
@@ -125,6 +155,12 @@ export function GatewaySettings({
             </div>
           )}
 
+          {testResult && (
+            <div className="gateway-settings-success" role="status">
+              {testResult}
+            </div>
+          )}
+
           <div className="gateway-settings-actions">
             <button
               type="button"
@@ -137,10 +173,10 @@ export function GatewaySettings({
             <button
               type="button"
               className="btn-secondary"
-              onClick={() => void onRefresh()}
-              disabled={saving || status === 'checking'}
+              onClick={() => void handleTest()}
+              disabled={saving || testing}
             >
-              {status === 'checking' ? 'Checking…' : 'Test connection'}
+              {testing ? 'Testing…' : 'Test connection'}
             </button>
             <button
               type="button"
