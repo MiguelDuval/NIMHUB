@@ -262,7 +262,11 @@ class AgentRuntime:
             )
             messages.append(self._tool_result_message(call, result))
 
-    async def run(self, request: AgentRunRequest) -> AgentRunResponse:
+    async def run(
+        self,
+        request: AgentRunRequest,
+        api_key: str | None = None,
+    ) -> AgentRunResponse:
         messages = list(request.messages)
         definitions, by_model_name = await self._discover()
 
@@ -308,7 +312,7 @@ class AgentRuntime:
                 payload["tools"] = [self._openai_tool(tool) for tool in definitions]
 
             try:
-                response = await self.nim.chat(payload)
+                response = await self.nim.chat(payload, api_key=api_key)
             except Exception:
                 return AgentRunResponse(
                     status="error",
@@ -416,7 +420,11 @@ class AgentRuntime:
             turns=request.max_turns,
         )
 
-    async def stream(self, request: AgentRunRequest) -> AsyncIterator[dict[str, Any]]:
+    async def stream(
+        self,
+        request: AgentRunRequest,
+        api_key: str | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """Stream content/tool/approval events while running the same loop."""
         messages = list(request.messages)
         definitions, by_model_name = await self._discover()
@@ -476,7 +484,7 @@ class AgentRuntime:
             created: int = 0
 
             try:
-                async for raw_line in self.nim.chat_stream(payload):
+                async for raw_line in self.nim.chat_stream(payload, api_key=api_key):
                     for line in raw_line.decode("utf-8", errors="replace").splitlines():
                         if not line.startswith("data: "):
                             continue
