@@ -29,7 +29,7 @@ export function AgentApprovalCard({
 
       <div className="agent-approval-list">
         {approvals.map((approval) => (
-          <article className="agent-approval-item" key={approval.approval_token}>
+          <article className="agent-approval-item" key={approval.arguments_sha256}>
             <div className="agent-approval-tool">
               <strong>{approval.tool}</strong>
               <span className={'agent-permission ' + approval.permission}>
