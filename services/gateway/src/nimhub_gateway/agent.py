@@ -397,6 +397,41 @@ class AgentRuntime:
         messages = list(request.messages)
         definitions, by_model_name = await self._discover()
 
+        if request.approval_grants:
+            approved_calls, pending = await self._prepare_approved_continuation(
+                messages,
+                by_model_name,
+                request.approval_grants,
+            )
+            if pending:
+                yield {
+                    "type": "approval_required",
+                    "approvals": [item.model_dump() for item in pending],
+                    "messages": messages,
+                    "turns": 0,
+                }
+                return
+
+            for call, tool, arguments in approved_calls:
+                try:
+                    result = await self.mcp.call_tool(
+                        MCPToolCallRequest(
+                            tool=tool.qualified_name,
+                            arguments=arguments,
+                            approval_grants=request.approval_grants,
+                        )
+                    )
+                    messages.append(self._tool_result_message(call, result))
+                    yield {
+                        "type": "tool_result",
+                        "tool": result.tool,
+                        "is_error": result.is_error,
+                        "turn": 0,
+                    }
+                except Exception as exc:
+                    messages.append(self._tool_error_message(call, str(exc)))
+                    yield self._tool_error_event(call, str(exc))
+
         for turn in range(1, request.max_turns + 1):
             payload: dict[str, Any] = {
                 "model": request.model,
