@@ -10,6 +10,13 @@ import type {
   ChatCompletionResponse,
   ChatCompletionChunk,
   HealthResponse,
+  MCPServerSummary,
+  MCPToolSummary,
+  MCPToolCallRequest,
+  MCPToolResult,
+  AgentRunRequest,
+  AgentRunResponse,
+  AgentStreamEvent,
 } from '../types';
 import { transformModels } from './models';
 
@@ -136,6 +143,97 @@ export const api = {
             } catch {
               // Ignore parse errors for malformed chunks
             }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  },
+
+  /**
+   * List sanitized MCP server metadata.
+   */
+  async listMCPServers(): Promise<MCPServerSummary[]> {
+    const response = await fetch(`${GATEWAY_URL}/api/mcp/servers`);
+    const data = await handleResponse<{ servers: MCPServerSummary[] }>(response);
+    return data.servers;
+  },
+
+  /**
+   * Discover sanitized MCP tool metadata.
+   */
+  async listMCPTools(): Promise<MCPToolSummary[]> {
+    const response = await fetch(`${GATEWAY_URL}/api/mcp/tools`);
+    const data = await handleResponse<{ tools: MCPToolSummary[] }>(response);
+    return data.tools;
+  },
+
+  /**
+   * Call one MCP tool through the gateway permission boundary.
+   */
+  async callMCPTool(request: MCPToolCallRequest): Promise<MCPToolResult> {
+    const response = await fetch(`${GATEWAY_URL}/api/mcp/call`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    return handleResponse<MCPToolResult>(response);
+  },
+
+  /**
+   * Run the gateway-owned model/MCP loop without streaming.
+   */
+  async agent(request: AgentRunRequest): Promise<AgentRunResponse> {
+    const response = await fetch(`${GATEWAY_URL}/api/agent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...request, stream: false }),
+    });
+    return handleResponse<AgentRunResponse>(response);
+  },
+
+  /**
+   * Stream gateway agent events over SSE.
+   */
+  async *agentStream(
+    request: AgentRunRequest,
+  ): AsyncGenerator<AgentStreamEvent, void, unknown> {
+    const response = await fetch(`${GATEWAY_URL}/api/agent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...request, stream: true }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      const errorData = (data as Record<string, unknown>)?.detail ?? data;
+      throw APIError.fromResponse(response, errorData);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (!data) continue;
+          try {
+            yield JSON.parse(data) as AgentStreamEvent;
+          } catch {
+            // Ignore malformed SSE payloads; the next event can still recover.
           }
         }
       }
