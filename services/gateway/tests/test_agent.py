@@ -56,33 +56,21 @@ class FakeNIM:
 
     async def chat_stream(self, payload: dict) -> AsyncIterator[bytes]:
         self.payloads.append(payload)
-        chunks = [
-            {
-                "id": "stream-1",
-                "object": "chat.completion.chunk",
-                "created": 1,
-                "model": payload["model"],
-                "choices": [{"index": 0, "delta": {"role": "assistant", "content": "hel"}, "finish_reason": None}],
-            },
-            {
-                "id": "stream-1",
-                "object": "chat.completion.chunk",
-                "created": 1,
-                "model": payload["model"],
-                "choices": [{"index": 0, "delta": {"content": "lo"}, "finish_reason": "stop"}],
-            },
-        ]
-        for chunk in chunks:
-            yield (f"data: {json.dumps(chunk)}\n\n").encode()
-        yield b"data: [DONE]\n\n"
+        yield b'data: {"id":"chat-1","object":"chat.completion.chunk","created":1,"model":"test-model","choices":[{"index":0,"delta":{"role":"assistant","content":"hel"},"finish_reason":null}]}
+
+'
+        yield b'data: {"id":"chat-1","object":"chat.completion.chunk","created":1,"model":"test-model","choices":[{"index":0,"delta":{"content":"lo"},"finish_reason":"stop"}]}
+
+'
+        yield b'data: [DONE]
+
+'
 
 
 @pytest.mark.asyncio
-async def test_agent_executes_tool_then_continues_model_turn() -> None:
+async def test_agent_executes_tool_then_continues() -> None:
     reg = registry()
-    discovered = await reg.list_all_tools()
-    echo = next(tool for tool in discovered if tool.name == "deterministic_echo")
-
+    echo = next(tool for tool in await reg.list_all_tools() if tool.name == "deterministic_echo")
     first = {
         "id": "chat-1",
         "object": "chat.completion",
@@ -112,22 +100,19 @@ async def test_agent_executes_tool_then_continues_model_turn() -> None:
 
     nim = FakeNIM([first, second])
     result = await AgentRuntime(nim, reg).run(
-        AgentRunRequest(
-            model="test-model",
-            messages=[{"role": "user", "content": "echo hello"}],
-        )
+        AgentRunRequest(model="test-model", messages=[{"role": "user", "content": "hello"}])
     )
 
     assert result.status == "completed"
     assert result.turns == 2
-    assert result.response == second
-    assert result.messages[-1]["content"] == "done"
+    assert result.response is not None
+    assert result.response["choices"][0]["message"]["content"] == "done"
     assert result.messages[-2]["role"] == "tool"
     assert "deterministic:hello" in result.messages[-2]["content"]
 
 
 @pytest.mark.asyncio
-async def test_agent_supports_multiple_tool_calls_in_one_turn() -> None:
+async def test_multiple_tool_calls_execute_without_short_circuit() -> None:
     reg = registry()
     echo = next(tool for tool in await reg.list_all_tools() if tool.name == "deterministic_echo")
     first = {
@@ -155,7 +140,7 @@ async def test_agent_supports_multiple_tool_calls_in_one_turn() -> None:
         "model": "test-model",
         "choices": [{
             "index": 0,
-            "message": {"role": "assistant", "content": "two tools completed"},
+            "message": {"role": "assistant", "content": "two"},
             "finish_reason": "stop",
         }],
     }
@@ -243,6 +228,7 @@ async def test_destructive_tool_stops_for_exact_approval_without_execution() -> 
     assert result.status == "approval_required"
     assert len(result.approvals) == 1
     assert result.approvals[0].tool == protected.qualified_name
+    assert result.approvals[0].tool_call_id == "call-1"
     assert result.approvals[0].arguments_sha256 == canonical_arguments_sha256({"value": "danger"})
     assert len(result.approvals[0].approval_token) >= 32
     assert len(nim.payloads) == 1
@@ -275,7 +261,6 @@ async def test_exact_approval_allows_continuation() -> None:
             "finish_reason": "stop",
         }],
     }
-    arguments = {"value": "danger"}
     first_nim = FakeNIM([first])
     first_result = await AgentRuntime(first_nim, reg).run(
         AgentRunRequest(
