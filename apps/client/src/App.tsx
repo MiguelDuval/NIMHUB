@@ -435,7 +435,11 @@ export default function App() {
               await refreshModels();
               await refreshMCP();
             }}
-            onRefresh={refreshGateway}
+            onRefresh={async () => {
+              await refreshGateway();
+              await refreshModels();
+              await refreshMCP();
+            }}
           />
           <div className={"status-indicator " + statusClass}>
             <span className="status-dot"></span>
