@@ -434,19 +434,44 @@ class MCPRegistry:
                 f"Invalid arguments for {tool.qualified_name}: {details}"
             )
 
-    @staticmethod
     def _is_approved(
+        self,
         tool: MCPToolDefinition,
         arguments_sha256: str,
         grants: list[MCPApprovalGrant],
     ) -> bool:
-        return any(
-            grant.tool in {tool.model_name, tool.qualified_name}
-            and grant.arguments_sha256 == arguments_sha256
-            for grant in grants
-        )
+        now = time.monotonic()
+        for token, (_, _, expires_at) in list(self._pending_approvals.items()):
+            if expires_at <= now:
+                self._pending_approvals.pop(token, None)
 
-    @staticmethod
+        for grant in grants:
+            pending = self._pending_approvals.get(grant.approval_token)
+            if pending is None:
+                continue
+            pending_tool, pending_hash, expires_at = pending
+            if (
+                expires_at > now
+                and pending_tool in {tool.model_name, tool.qualified_name}
+                and pending_hash == arguments_sha256
+                and grant.arguments_sha256 == arguments_sha256
+            ):
+                return True
+        return False
+
+    def _issue_approval_token(
+        self,
+        tool: MCPToolDefinition,
+        arguments_sha256: str,
+    ) -> str:
+        token = secrets.token_urlsafe(32)
+        self._pending_approvals[token] = (
+            tool.qualified_name,
+            arguments_sha256,
+            time.monotonic() + self._approval_ttl_seconds,
+        )
+        return token
+
     def _enforce_policy(
         tool: MCPToolDefinition,
         *,
@@ -464,12 +489,17 @@ class MCPRegistry:
                 f"Tool {tool.qualified_name} requires destructive MCP permission"
             )
 
-        if tool.requires_approval and not MCPRegistry._is_approved(
+        if tool.requires_approval and not self._is_approved(
             tool,
             arguments_sha256,
             grants,
         ):
-            raise MCPApprovalRequired(tool, arguments_sha256)
+            approval_token = self._issue_approval_token(tool, arguments_sha256)
+            raise MCPApprovalRequired(
+                tool,
+                arguments_sha256,
+                approval_token,
+            )
 
     @staticmethod
     def _serialize_content(content: Any) -> dict[str, Any]:
