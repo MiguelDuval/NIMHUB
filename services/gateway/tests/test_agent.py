@@ -315,6 +315,79 @@ async def test_exact_approval_executes_original_call_before_model_resume() -> No
 
 
 @pytest.mark.asyncio
+async def test_approval_continuation_skips_completed_sibling_tool_errors() -> None:
+    reg = registry(permission="destructive")
+    protected = next(tool for tool in await reg.list_all_tools() if tool.name == "protected_write")
+    calls = [
+        tool_call("does-not-exist", "call-bad", "bad"),
+        tool_call(protected.model_name, "call-write", "danger"),
+    ]
+    first = {
+        "id": "chat-1",
+        "object": "chat.completion",
+        "created": 1,
+        "model": "test-model",
+        "choices": [{
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": calls,
+            },
+            "finish_reason": "tool_calls",
+        }],
+    }
+    final = {
+        "id": "chat-2",
+        "object": "chat.completion",
+        "created": 2,
+        "model": "test-model",
+        "choices": [{
+            "index": 0,
+            "message": {"role": "assistant", "content": "recovered"},
+            "finish_reason": "stop",
+        }],
+    }
+
+    first_nim = FakeNIM([first])
+    runtime = AgentRuntime(first_nim, reg)
+    first_result = await runtime.run(
+        AgentRunRequest(
+            model="test-model",
+            messages=[{"role": "user", "content": "mixed"}],
+        )
+    )
+
+    assert first_result.status == "approval_required"
+    assert len(first_result.approvals) == 1
+    assert first_result.messages[-1]["role"] == "tool"
+    assert first_result.messages[-1]["tool_call_id"] == "call-bad"
+
+    approval = first_result.approvals[0]
+    grant = MCPApprovalGrant(
+        approval_token=approval.approval_token,
+        arguments_sha256=approval.arguments_sha256,
+    )
+
+    nim = FakeNIM([final])
+    result = await AgentRuntime(nim, reg).run(
+        AgentRunRequest(
+            model="test-model",
+            messages=first_result.messages,
+            approval_grants=[grant],
+        )
+    )
+
+    assert result.status == "completed"
+    tool_messages = [message for message in result.messages if message["role"] == "tool"]
+    assert len(tool_messages) == 2
+    assert tool_messages[0]["tool_call_id"] == "call-bad"
+    assert tool_messages[1]["tool_call_id"] == "call-write"
+    assert "protected:danger" in tool_messages[1]["content"]
+    assert result.messages[-1]["content"] == "recovered"
+    assert len(nim.payloads) == 1
+
+@pytest.mark.asyncio
 async def test_streaming_approval_executes_original_call_before_model_resume() -> None:
     reg = registry(permission="destructive")
     protected = next(tool for tool in await reg.list_all_tools() if tool.name == "protected_write")
