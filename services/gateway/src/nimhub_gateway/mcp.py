@@ -465,17 +465,31 @@ class MCPRegistry:
             return model_dump(by_alias=True, exclude_none=True)
         return {"type": "unknown", "value": str(content)}
 
+    async def authorize_tool_call(
+        self,
+        tool: MCPToolDefinition,
+        arguments: dict[str, Any],
+        grants: list[MCPApprovalGrant],
+    ) -> str:
+        """Validate and authorize a tool call without executing it."""
+        self._validate_arguments(tool, arguments)
+        arguments_sha256 = canonical_arguments_sha256(arguments)
+        self._enforce_policy(
+            tool,
+            arguments_sha256=arguments_sha256,
+            grants=grants,
+        )
+        return arguments_sha256
+
     async def call_tool(
         self,
         request: MCPToolCallRequest,
     ) -> MCPToolResult:
         tool = await self.resolve_tool(request.tool)
-        self._validate_arguments(tool, request.arguments)
-        arguments_sha256 = canonical_arguments_sha256(request.arguments)
-        self._enforce_policy(
+        arguments_sha256 = await self.authorize_tool_call(
             tool,
-            arguments_sha256=arguments_sha256,
-            grants=request.approval_grants,
+            request.arguments,
+            request.approval_grants,
         )
 
         async with self._connect(self.get_server(tool.server_id)) as client:
