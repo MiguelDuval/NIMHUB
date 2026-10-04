@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, APIError } from '../services/api';
 import {
   getGatewayUrl,
@@ -22,19 +22,23 @@ export function useGatewayStatus(): GatewayStatus {
   const [status, setStatus] = useState<GatewayConnectionStatus>('checking');
   const [error, setError] = useState<APIError | Error | null>(null);
   const [nvidiaConfigured, setNvidiaConfigured] = useState<boolean | null>(null);
+  const requestIdRef = useRef(0);
 
   const refresh = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setStatus('checking');
     setError(null);
 
     try {
       const health = await api.health();
+      if (requestId !== requestIdRef.current) return;
       setNvidiaConfigured(health.nvidia_configured);
       setStatus(health.ok ? 'connected' : 'error');
       if (!health.ok) {
         setError(new Error('Gateway reported an unhealthy state'));
       }
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       setNvidiaConfigured(null);
       setStatus('error');
       setError(
