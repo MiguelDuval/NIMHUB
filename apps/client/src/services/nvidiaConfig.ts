@@ -1,5 +1,4 @@
 import { Capacitor } from '@capacitor/core';
-import { normalizeGatewayUrl } from './gatewayConfig';
 import { secureGet, secureHas, secureRemove, secureSet } from './secureStorage';
 
 export const NVIDIA_API_KEY_STORAGE = 'nvidia.api_key';
