@@ -42,6 +42,13 @@ export function useChat({
   const abortControllerRef = useRef<AbortController | null>(null);
   const retryCountRef = useRef(0);
   const isMountedRef = useRef(true);
+  // Store the last sent messages for retry
+  const lastSentMessagesRef = useRef<ChatMessage[]>(initialMessages);
+
+  // Update ref when messages change (for retry to use current messages)
+  useEffect(() => {
+    lastSentMessagesRef.current = initialMessages;
+  }, [initialMessages]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -69,6 +76,9 @@ export function useChat({
       // Create new abort controller for this request
       abortControllerRef.current = new AbortController();
       const { signal } = abortControllerRef.current;
+
+      // Store messages for potential retry
+      lastSentMessagesRef.current = msgs;
 
       setStatus(stream ? 'streaming' : 'pending');
       setError(null);
@@ -152,9 +162,9 @@ export function useChat({
 
     if (!isMountedRef.current) return;
 
-    // Retry with the same messages
-    await send(initialMessages, { stream: true });
-  }, [error, initialMessages, send]);
+    // Retry with the last sent messages
+    await send(lastSentMessagesRef.current, { stream: true });
+  }, [error, send]);
 
   const isRetryable = error?.retryable ?? false;
 
