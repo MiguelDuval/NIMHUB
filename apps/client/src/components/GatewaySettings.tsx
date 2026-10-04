@@ -121,7 +121,7 @@ export function GatewaySettings({
 
           {(localError || error) && (
             <div className="gateway-settings-error" role="alert">
-              {(localError ?? error)?.message}
+              {localError ?? error?.message}
             </div>
           )}
 
