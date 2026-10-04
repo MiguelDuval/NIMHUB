@@ -23,6 +23,10 @@ export function normalizeGatewayUrl(value: string): string {
     throw new Error('Gateway URL must include a host');
   }
 
+  if (parsed.username || parsed.password) {
+    throw new Error('Gateway URL must not contain embedded credentials');
+  }
+
   parsed.hash = '';
   parsed.search = '';
   parsed.pathname = parsed.pathname.replace(/\/+$/, '');
