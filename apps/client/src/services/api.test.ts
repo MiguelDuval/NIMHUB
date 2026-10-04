@@ -10,6 +10,44 @@ describe('MCP gateway API', () => {
     );
   });
 
+  it('tests an explicit gateway URL without changing the persisted gateway', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          service: 'nim-hub-gateway',
+          nvidia_configured: true,
+          mcp_servers_configured: 1,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const storage = {
+      getItem: vi.fn().mockReturnValue('http://192.168.1.20:8787'),
+      setItem: vi.fn(),
+    };
+
+    vi.stubGlobal('window', {
+      localStorage: storage,
+      dispatchEvent: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(api.healthAt('http://192.168.1.30:8787/')).resolves.toMatchObject({
+      ok: true,
+      nvidia_configured: true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://192.168.1.30:8787/api/health',
+    );
+    expect(storage.setItem).not.toHaveBeenCalled();
+
+    vi.unstubAllGlobals();
+  });
+
   it('uses the persisted gateway URL for requests', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
