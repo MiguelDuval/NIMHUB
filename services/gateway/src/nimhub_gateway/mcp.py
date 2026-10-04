@@ -12,6 +12,7 @@ import json
 import re
 import secrets
 import time
+import threading
 from contextlib import asynccontextmanager
 from os import environ
 from typing import Any, Literal
@@ -308,6 +309,7 @@ class MCPRegistry:
     def __init__(self, servers: list[MCPServerConfig]):
         self._servers = {server.id: server for server in servers}
         self._pending_approvals: dict[str, tuple[str, str, float]] = {}
+        self._approval_lock = threading.Lock()
         self._approval_ttl_seconds = 600.0
 
     @classmethod
@@ -444,22 +446,51 @@ class MCPRegistry:
         grants: list[MCPApprovalGrant],
     ) -> bool:
         now = time.monotonic()
-        for token, (_, _, expires_at) in list(self._pending_approvals.items()):
-            if expires_at <= now:
-                self._pending_approvals.pop(token, None)
+        with self._approval_lock:
+            for token, (_, _, expires_at) in list(self._pending_approvals.items()):
+                if expires_at <= now:
+                    self._pending_approvals.pop(token, None)
 
-        for grant in grants:
-            pending = self._pending_approvals.get(grant.approval_token)
-            if pending is None:
-                continue
-            pending_tool, pending_hash, expires_at = pending
-            if (
-                expires_at > now
-                and pending_tool in {tool.model_name, tool.qualified_name}
-                and pending_hash == arguments_sha256
-                and grant.arguments_sha256 == arguments_sha256
-            ):
-                return True
+            for grant in grants:
+                pending = self._pending_approvals.get(grant.approval_token)
+                if pending is None:
+                    continue
+                pending_tool, pending_hash, expires_at = pending
+                if (
+                    expires_at > now
+                    and pending_tool in {tool.model_name, tool.qualified_name}
+                    and pending_hash == arguments_sha256
+                    and grant.arguments_sha256 == arguments_sha256
+                ):
+                    return True
+        return False
+
+    def _consume_approval(
+        self,
+        tool: MCPToolDefinition,
+        arguments_sha256: str,
+        grants: list[MCPApprovalGrant],
+    ) -> bool:
+        """Atomically consume one matching approval grant exactly once."""
+        now = time.monotonic()
+        with self._approval_lock:
+            for token, (_, _, expires_at) in list(self._pending_approvals.items()):
+                if expires_at <= now:
+                    self._pending_approvals.pop(token, None)
+
+            for grant in grants:
+                pending = self._pending_approvals.get(grant.approval_token)
+                if pending is None:
+                    continue
+                pending_tool, pending_hash, expires_at = pending
+                if (
+                    expires_at > now
+                    and pending_tool in {tool.model_name, tool.qualified_name}
+                    and pending_hash == arguments_sha256
+                    and grant.arguments_sha256 == arguments_sha256
+                ):
+                    self._pending_approvals.pop(grant.approval_token, None)
+                    return True
         return False
 
     def _issue_approval_token(
@@ -541,16 +572,17 @@ class MCPRegistry:
             request.approval_grants,
         )
 
-        approved_token: str | None = None
         if tool.requires_approval:
-            for grant in request.approval_grants:
-                if self._is_approved(tool, arguments_sha256, [grant]):
-                    approved_token = grant.approval_token
-                    break
-
-        if approved_token is not None:
-            # Consume the approval immediately before the external operation.
-            self._pending_approvals.pop(approved_token, None)
+            # Re-check and consume while holding the approval lock so two
+            # concurrent requests cannot both execute the same approved call.
+            if not self._consume_approval(
+                tool,
+                arguments_sha256,
+                request.approval_grants,
+            ):
+                raise MCPPolicyError(
+                    f"Approval grant for {tool.qualified_name} was already consumed or expired"
+                )
 
         async with self._connect(self.get_server(tool.server_id)) as client:
             result = await client.call_tool(tool.name, request.arguments)
