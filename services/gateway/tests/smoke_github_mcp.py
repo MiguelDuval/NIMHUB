@@ -86,13 +86,31 @@ def main() -> None:
     if result.get("is_error"):
         raise SystemExit(f"GitHub MCP tool returned an MCP error: {result!r}")
 
-    text_parts = [
-        item.get("text", "")
-        for item in result.get("content", [])
-        if isinstance(item, dict) and isinstance(item.get("text"), str)
-    ]
+    def collect_text(value: object) -> list[str]:
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, list):
+            text_values: list[str] = []
+            for item in value:
+                text_values.extend(collect_text(item))
+            return text_values
+        if isinstance(value, dict):
+            text_values: list[str] = []
+            if isinstance(value.get("text"), str):
+                text_values.append(value["text"])
+            if "resource" in value:
+                text_values.extend(collect_text(value["resource"]))
+            if "content" in value:
+                text_values.extend(collect_text(value["content"]))
+            return text_values
+        return []
+
+    text_parts = collect_text(result.get("content", []))
     if "NIM Hub" not in "".join(text_parts):
-        raise SystemExit("GitHub MCP smoke returned unexpected README content")
+        raise SystemExit(
+            "GitHub MCP smoke returned unexpected README content: "
+            + json.dumps(result, ensure_ascii=False)[:2000]
+        )
 
     print(
         json.dumps(
