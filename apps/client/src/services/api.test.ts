@@ -4,6 +4,12 @@ import { api } from './api';
 import { normalizeGatewayUrl } from './gatewayConfig';
 
 describe('MCP gateway API', () => {
+  it('rejects credential-bearing gateway URLs', () => {
+    expect(() => normalizeGatewayUrl('http://user:password@192.168.1.20:8787')).toThrow(
+      'must not contain embedded credentials',
+    );
+  });
+
   it('uses the persisted gateway URL for requests', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
