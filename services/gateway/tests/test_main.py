@@ -35,3 +35,33 @@ def test_agent_requires_gateway_side_nvidia_configuration() -> None:
 
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "NVIDIA_NOT_CONFIGURED"
+
+@pytest.mark.asyncio
+async def test_agent_stream_endpoint_emits_real_sse_frame_separators(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "nvidia_api_key", "test-key")
+
+    async def fake_stream(_request):
+        yield {
+            "type": "done",
+            "turns": 1,
+            "response": {"choices": []},
+            "messages": [],
+        }
+
+    monkeypatch.setattr(agent_runtime, "stream", fake_stream)
+
+    with client.stream(
+        "POST",
+        "/api/agent",
+        json={
+            "model": "test-model",
+            "messages": [{"role": "user", "content": "hello"}],
+            "stream": True,
+        },
+    ) as response:
+        body = b"".join(response.iter_bytes())
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert b"data: {\"type\": \"done\", \"turns\": 1" in body
+    assert body.endswith(b"\n\n")
