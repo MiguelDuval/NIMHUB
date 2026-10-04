@@ -112,11 +112,10 @@ def test_nvidia_settings_reject_invalid_admin_token(monkeypatch) -> None:
 def test_nvidia_settings_verify_before_persisting(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(settings, "nim_hub_admin_token", "expected-token")
     monkeypatch.setattr(settings, "nim_hub_env_file", str(tmp_path / ".env"))
-    monkeypatch.setattr(
-        nim,
-        "list_models",
-        lambda **kwargs: {"object": "list", "data": [{"id": "nvidia/test"}]},
-    )
+    async def fake_list_models(**_kwargs):
+        return {"object": "list", "data": [{"id": "nvidia/test"}]}
+
+    monkeypatch.setattr(nim, "list_models", fake_list_models)
 
     response = client.put(
         "/api/settings/nvidia",
