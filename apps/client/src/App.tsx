@@ -5,6 +5,7 @@ import { useChat } from './hooks/useChat';
 import { useAgent } from './hooks/useAgent';
 import { useMCPStatus } from './hooks/useMCPStatus';
 import { useGatewayStatus } from './hooks/useGatewayStatus';
+import { useNvidiaStatus } from './hooks/useNvidiaStatus';
 import { useAttachments } from './hooks/useAttachments';
 import { storage } from './services/storage';
 import { api } from './services/api';
@@ -16,7 +17,7 @@ import { ConversationList } from './components/ConversationList';
 import { WelcomeMessage } from './components/WelcomeMessage';
 import { Composer } from './components/Composer';
 import { AgentApprovalCard } from './components/AgentApprovalCard';
-import { GatewaySettings } from './components/GatewaySettings';
+import { SettingsScreen } from './components/SettingsScreen';
 import './styles.css';
 
 function storedToChatMessage(msg: StoredMessage): ChatMessage {
@@ -71,12 +72,18 @@ export default function App() {
     url: gatewayUrl,
     status: gatewayStatus,
     error: gatewayError,
-    nvidiaConfigured,
-    nvidiaBaseUrl,
-    adminConfigured,
+    nvidiaConfigured: gatewayNvidiaConfigured,
+    nvidiaBaseUrl: gatewayNvidiaBaseUrl,
+    adminConfigured: gatewayAdminConfigured,
     updateUrl: updateGatewayUrl,
     saveNvidiaSettings,
   } = useGatewayStatus();
+
+  const {
+    configured: nvidiaConfigured,
+    baseUrl: nvidiaBaseUrl,
+    refresh: refreshNvidia,
+  } = useNvidiaStatus();
 
   const [inputMessage, setInputMessage] = useState('');
   const [streamingContent, setStreamingContent] = useState('');
@@ -84,6 +91,7 @@ export default function App() {
   const [showModelDetails, setShowModelDetails] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [agentMode, setAgentMode] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const currentConversationRef = useRef(currentConversation);
   const messagesAreaRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
@@ -363,7 +371,6 @@ export default function App() {
     () =>
       Boolean(inputMessage.trim() || attachments.length > 0) &&
       Boolean(selectedModelId) &&
-      gatewayStatus === 'connected' &&
       nvidiaConfigured === true &&
       (attachments.length === 0 || (selectedModel?.capabilities.includes('vision') ?? false)) &&
       !effectiveBusy &&
@@ -485,26 +492,19 @@ export default function App() {
           />
         </div>
         <div className="topbar-right">
-          <GatewaySettings
-            url={gatewayUrl}
-            status={gatewayStatus}
-            nvidiaConfigured={nvidiaConfigured}
-            nvidiaBaseUrl={nvidiaBaseUrl}
-            adminConfigured={adminConfigured}
-            error={gatewayError}
-            onSave={async (nextUrl) => {
-              await updateGatewayUrl(nextUrl);
-              await refreshModels();
-              await refreshMCP();
-            }}
-            onTest={(nextUrl) => api.healthAt(nextUrl)}
-            onSaveNvidia={async (settingsInput, adminToken) => {
-              const result = await saveNvidiaSettings(settingsInput, adminToken);
-              await refreshModels();
-              await refreshMCP();
-              return result;
-            }}
-          />
+          <button
+            className={'settings-icon-button ' + (nvidiaConfigured ? 'ready' : 'attention')}
+            type="button"
+            onClick={() => setShowSettings(true)}
+            title="Open Settings"
+            aria-label="Open Settings"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.7 1.7-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V20h-2.4v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1-1.7-1.7.1-.1A1.7 1.7 0 0 0 8.4 15a1.7 1.7 0 0 0-1.5-1H6v-2.4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1L9 6.9l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V5h2.4v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.7 1.7-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.2V14h-.2a1.7 1.7 0 0 0-1.5 1Z"></path>
+            </svg>
+            <span className="settings-icon-label">Settings</span>
+          </button>
           <div className={"status-indicator " + statusClass}>
             <span className="status-dot"></span>
             <span>
@@ -573,6 +573,19 @@ export default function App() {
 
         <div className="main-area">
           <div className="chat-container">
+            {!nvidiaConfigured && (
+              <div className="setup-card" role="status">
+                <div>
+                  <span className="setup-kicker">FIRST RUN</span>
+                  <strong>Connect NVIDIA to start using NIM Hub</strong>
+                  <p>Enter your NVIDIA API key in Settings. No GitHub checkout or local repo is required on the phone.</p>
+                </div>
+                <button className="btn-primary" type="button" onClick={() => setShowSettings(true)}>
+                  Open Settings
+                </button>
+              </div>
+            )}
+
             {selectedModel && (
               <div className="model-capabilities-bar">
                 <span className="model-name">{selectedModel.name ?? selectedModel.id}</span>
@@ -684,10 +697,8 @@ export default function App() {
               canSend={canSend}
               visionEnabled={selectedModel?.capabilities.includes('vision') ?? false}
               placeholder={
-                gatewayStatus !== 'connected'
-                  ? 'Type here — configure Gateway to send…'
-                  : nvidiaConfigured !== true
-                  ? 'Type here — connect NVIDIA to send…'
+                nvidiaConfigured !== true
+                  ? 'Type here — open Settings and connect NVIDIA…'
                   : !selectedModelId
                   ? 'Type here — choose a model to send…'
                   : 'Ask NIM Hub anything…'
@@ -709,9 +720,28 @@ export default function App() {
       )}
 
       <footer className="footer">
-        <span>Gateway: {gatewayUrl}</span>
-        <span>NIM Hub v0.1</span>
+        <span>NVIDIA: {nvidiaConfigured ? 'Connected' : 'Not configured'}</span>
+        <span>Gateway: {gatewayStatus === 'connected' ? 'Online' : 'Optional'}</span>
+        <span>NIM Hub v0.2</span>
       </footer>
+
+      <SettingsScreen
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+        nvidiaConfigured={nvidiaConfigured}
+        nvidiaBaseUrl={nvidiaBaseUrl}
+        onNvidiaChanged={refreshNvidia}
+        onRefreshModels={refreshModels}
+        gatewayUrl={gatewayUrl}
+        gatewayStatus={gatewayStatus}
+        gatewayAdminConfigured={gatewayAdminConfigured}
+        onSaveGateway={async (nextUrl) => {
+          await updateGatewayUrl(nextUrl);
+          await refreshModels();
+          await refreshMCP();
+        }}
+        onTestGateway={(nextUrl) => api.healthAt(nextUrl)}
+      />
     </main>
   );
 }
