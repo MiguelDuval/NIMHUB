@@ -244,6 +244,7 @@ async def test_destructive_tool_stops_for_exact_approval_without_execution() -> 
     assert len(result.approvals) == 1
     assert result.approvals[0].tool == protected.qualified_name
     assert result.approvals[0].arguments_sha256 == canonical_arguments_sha256({"value": "danger"})
+    assert len(result.approvals[0].approval_token) >= 32
     assert len(nim.payloads) == 1
 
 
@@ -275,16 +276,25 @@ async def test_exact_approval_allows_continuation() -> None:
         }],
     }
     arguments = {"value": "danger"}
+    first_nim = FakeNIM([first])
+    first_result = await AgentRuntime(first_nim, reg).run(
+        AgentRunRequest(
+            model="test-model",
+            messages=[{"role": "user", "content": "write"}],
+        )
+    )
+    assert first_result.status == "approval_required"
+    approval = first_result.approvals[0]
     grant = MCPApprovalGrant(
-        tool=protected.qualified_name,
-        arguments_sha256=canonical_arguments_sha256(arguments),
+        approval_token=approval.approval_token,
+        arguments_sha256=approval.arguments_sha256,
     )
 
     nim = FakeNIM([first, final])
     result = await AgentRuntime(nim, reg).run(
         AgentRunRequest(
             model="test-model",
-            messages=[{"role": "user", "content": "write"}],
+            messages=first_result.messages,
             approval_grants=[grant],
         )
     )
