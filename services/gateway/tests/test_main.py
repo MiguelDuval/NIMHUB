@@ -78,3 +78,60 @@ def test_cors_allows_capacitor_android_origin() -> None:
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "https://localhost"
+
+
+def test_nvidia_settings_require_server_admin_token() -> None:
+    response = client.put(
+        "/api/settings/nvidia",
+        json={
+            "api_key": "nvapi-test",
+            "base_url": "https://integrate.api.nvidia.com/v1",
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "NIM_HUB_ADMIN_NOT_CONFIGURED"
+
+
+def test_nvidia_settings_reject_invalid_admin_token(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "nim_hub_admin_token", "expected-token")
+
+    response = client.put(
+        "/api/settings/nvidia",
+        headers={"X-NIM-Hub-Admin-Token": "wrong-token"},
+        json={
+            "api_key": "nvapi-test",
+            "base_url": "https://integrate.api.nvidia.com/v1",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "NIM_HUB_ADMIN_UNAUTHORIZED"
+
+
+def test_nvidia_settings_verify_before_persisting(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(settings, "nim_hub_admin_token", "expected-token")
+    monkeypatch.setattr(settings, "nim_hub_env_file", str(tmp_path / ".env"))
+    monkeypatch.setattr(
+        nim,
+        "list_models",
+        lambda **kwargs: {"object": "list", "data": [{"id": "nvidia/test"}]},
+    )
+
+    response = client.put(
+        "/api/settings/nvidia",
+        headers={"X-NIM-Hub-Admin-Token": "expected-token"},
+        json={
+            "api_key": "nvapi-test",
+            "base_url": "https://integrate.api.nvidia.com/v1",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["nvidia_configured"] is True
+    assert body["models_available"] == 1
+    assert body["nvidia_base_url"] == "https://integrate.api.nvidia.com/v1"
+    assert "nvapi-test" in (tmp_path / ".env").read_text()
+    assert response.text.count("nvapi-test") == 0
