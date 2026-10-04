@@ -129,10 +129,11 @@ export default function App() {
 
   const persistAgentMessages = useCallback(
     async (messagesToPersist: ChatMessage[]) => {
-      if (!currentConversation) return;
+      const conversation = currentConversationRef.current;
+      if (!conversation) return;
       for (const message of messagesToPersist) {
         await addMessage(
-          currentConversation.id,
+          conversation.id,
           message.role,
           message.content,
           {
@@ -143,7 +144,7 @@ export default function App() {
         );
       }
     },
-    [addMessage, currentConversation],
+    [addMessage],
   );
 
   const {
