@@ -38,6 +38,13 @@ export function useModels() {
     setSelectedModelId(modelId);
   }, []);
 
+  // Set model from conversation (used when switching conversations)
+  const setModelFromConversation = useCallback((modelId: string) => {
+    if (models.some(m => m.id === modelId)) {
+      setSelectedModelId(modelId);
+    }
+  }, [models]);
+
   const getModel = useCallback(
     (modelId: string): ModelCapabilityInfo | undefined => {
       return models.find((m) => m.id === modelId);
@@ -90,6 +97,7 @@ export function useModels() {
     error,
     loadModels,
     selectModel,
+    setModelFromConversation,
     getModel,
     getModelsByCapability,
     getModelsByEndpointFamily,

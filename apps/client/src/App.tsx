@@ -49,6 +49,7 @@ export default function App() {
     loading: modelsLoading,
     error: modelsError,
     selectModel,
+    setModelFromConversation,
   } = useModels();
 
   const {
@@ -148,8 +149,12 @@ export default function App() {
     (conversationId: string) => {
       selectConversation(conversationId);
       setStreamingContent('');
+      // Sync model with conversation
+      if (currentConversation) {
+        setModelFromConversation(currentConversation.modelId);
+      }
     },
-    [selectConversation]
+    [selectConversation, setModelFromConversation]
   );
 
   const handleDeleteConversation = useCallback(
