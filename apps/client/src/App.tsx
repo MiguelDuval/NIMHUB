@@ -39,6 +39,7 @@ export default function App() {
     deleteConversation,
     updateConversation,
     addMessage,
+    updateLastMessage,
     clearError: clearConvError,
   } = useConversations();
 
@@ -74,10 +75,14 @@ export default function App() {
   const { status, error: chatError, abort, retry, send, isRetryable } = useChat({
     modelId: selectedModelId,
     messages: chatMessages,
-    onChunk: setStreamingContent,
+    onChunk: (content) => {
+      setStreamingContent(content);
+      if (currentConversation) updateLastMessage(currentConversation.id, content);
+    },
     onComplete: (response) => {
       const content = response.choices[0]?.message?.content ?? '';
-      if (currentConversation && content) addMessage(currentConversation.id, 'assistant', content);
+      // Message already persisted via onChunk -> updateLastMessage
+      // No need to add again
       setStreamingContent('');
       setRetryCount(0);
     },
@@ -103,7 +108,6 @@ export default function App() {
 
     await addMessage(currentConversation.id, 'user', content);
     const apiMessages = [...chatMessages, { role: 'user' as const, content }];
-    await addMessage(currentConversation.id, 'assistant', '');
     setInputMessage('');
     clearAttachments();
     await send(apiMessages, { stream: true });
