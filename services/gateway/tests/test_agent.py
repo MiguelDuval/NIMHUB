@@ -235,7 +235,7 @@ async def test_destructive_tool_stops_for_exact_approval_without_execution() -> 
 
 
 @pytest.mark.asyncio
-async def test_exact_approval_allows_continuation() -> None:
+async def test_exact_approval_executes_original_call_before_model_resume() -> None:
     reg = registry(permission="destructive")
     protected = next(tool for tool in await reg.list_all_tools() if tool.name == "protected_write")
     call = tool_call(protected.model_name, "call-1", "danger")
@@ -261,6 +261,7 @@ async def test_exact_approval_allows_continuation() -> None:
             "finish_reason": "stop",
         }],
     }
+
     first_nim = FakeNIM([first])
     first_result = await AgentRuntime(first_nim, reg).run(
         AgentRunRequest(
@@ -275,7 +276,7 @@ async def test_exact_approval_allows_continuation() -> None:
         arguments_sha256=approval.arguments_sha256,
     )
 
-    nim = FakeNIM([first, final])
+    nim = FakeNIM([final])
     result = await AgentRuntime(nim, reg).run(
         AgentRunRequest(
             model="test-model",
@@ -285,10 +286,61 @@ async def test_exact_approval_allows_continuation() -> None:
     )
 
     assert result.status == "completed"
-    assert result.turns == 2
-    tool_message = result.messages[-2]
-    assert tool_message["role"] == "tool"
-    assert "protected:danger" in tool_message["content"]
+    assert result.turns == 1
+    assert result.messages[-2]["role"] == "tool"
+    assert "protected:danger" in result.messages[-2]["content"]
+    assert result.messages[-1]["content"] == "approved"
+    assert len(nim.payloads) == 1
+    assert nim.payloads[0]["messages"][-1]["role"] == "tool"
+
+
+@pytest.mark.asyncio
+async def test_streaming_approval_executes_original_call_before_model_resume() -> None:
+    reg = registry(permission="destructive")
+    protected = next(tool for tool in await reg.list_all_tools() if tool.name == "protected_write")
+    call = tool_call(protected.model_name, "call-1", "danger")
+    first_response = {
+        "id": "chat-1",
+        "object": "chat.completion",
+        "created": 1,
+        "model": "test-model",
+        "choices": [{
+            "index": 0,
+            "message": {"role": "assistant", "content": None, "tool_calls": [call]},
+            "finish_reason": "tool_calls",
+        }],
+    }
+
+    first_nim = FakeNIM([first_response])
+    first_result = await AgentRuntime(first_nim, reg).run(
+        AgentRunRequest(
+            model="test-model",
+            messages=[{"role": "user", "content": "write"}],
+        )
+    )
+    approval = first_result.approvals[0]
+    grant = MCPApprovalGrant(
+        approval_token=approval.approval_token,
+        arguments_sha256=approval.arguments_sha256,
+    )
+
+    nim = FakeNIM([])
+    events = [
+        event
+        async for event in AgentRuntime(nim, reg).stream(
+            AgentRunRequest(
+                model="test-model",
+                messages=first_result.messages,
+                approval_grants=[grant],
+                stream=True,
+            )
+        )
+    ]
+
+    assert events[0]["type"] == "tool_result"
+    assert events[0]["tool"] == protected.qualified_name
+    assert [event["type"] for event in events[1:]] == ["content_delta", "content_delta", "done"]
+    assert "".join(event.get("text", "") for event in events if event["type"] == "content_delta") == "hello"
 
 
 @pytest.mark.asyncio
