@@ -12,12 +12,15 @@ export function useModels() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const hasLoadedRef = useRef(false);
+  const requestIdRef = useRef(0);
 
   const loadModels = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     try {
       setLoading(true);
       setError(null);
       const modelList = await api.listModels();
+      if (requestId !== requestIdRef.current) return;
       setModels(modelList);
       // Auto-select first chat-capable model ONLY on initial load
       if (!hasLoadedRef.current) {
@@ -30,6 +33,7 @@ export function useModels() {
         hasLoadedRef.current = true;
       }
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       setError(err instanceof Error ? err : new Error('Failed to load models'));
     } finally {
       setLoading(false);
