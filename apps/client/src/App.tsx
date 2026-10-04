@@ -300,7 +300,6 @@ export default function App() {
       Boolean(inputMessage.trim() || attachments.length > 0) &&
       Boolean(selectedModelId) &&
       !effectiveBusy &&
-      !(agentMode && agentStatus === 'approval_required') &&
       (agentMode
         ? canUseAgent
         : status === 'idle' || status === 'success' || status === 'error'),
@@ -570,8 +569,7 @@ export default function App() {
               disabled={
                 !selectedModelId ||
                 (agentMode && !canUseAgent) ||
-                effectiveBusy ||
-                (agentMode && agentStatus === 'approval_required')
+                effectiveBusy
               }
               streaming={status === 'streaming' || agentStatus === 'running'}
               canSend={canSend}
