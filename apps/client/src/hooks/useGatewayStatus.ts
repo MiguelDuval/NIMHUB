@@ -49,8 +49,7 @@ export function useGatewayStatus(): GatewayStatus {
     const normalized = normalizeGatewayUrl(value);
     setGatewayUrl(normalized);
     setUrl(normalized);
-    await refresh();
-  }, [refresh]);
+  }, []);
 
   useEffect(() => {
     const handleChange = (event: Event) => {
