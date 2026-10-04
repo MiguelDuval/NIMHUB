@@ -312,7 +312,11 @@ class AgentRuntime:
                 payload["tools"] = [self._openai_tool(tool) for tool in definitions]
 
             try:
-                response = await self.nim.chat(payload, api_key=api_key)
+                response = (
+                    await self.nim.chat(payload, api_key=api_key)
+                    if api_key is not None
+                    else await self.nim.chat(payload)
+                )
             except Exception:
                 return AgentRunResponse(
                     status="error",
@@ -484,7 +488,12 @@ class AgentRuntime:
             created: int = 0
 
             try:
-                async for raw_line in self.nim.chat_stream(payload, api_key=api_key):
+                stream = (
+                    self.nim.chat_stream(payload, api_key=api_key)
+                    if api_key is not None
+                    else self.nim.chat_stream(payload)
+                )
+                async for raw_line in stream:
                     for line in raw_line.decode("utf-8", errors="replace").splitlines():
                         if not line.startswith("data: "):
                             continue
