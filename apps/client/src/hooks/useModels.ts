@@ -32,7 +32,7 @@ export function useModels() {
     } finally {
       setLoading(false);
     }
-  }, [selectedModelId]);
+  }, []); // No dependency on selectedModelId
 
   useEffect(() => {
     loadModels();
@@ -94,12 +94,18 @@ export function useModels() {
     [getModel]
   );
 
+  const refreshModels = useCallback(async () => {
+    hasLoadedRef.current = false;
+    await loadModels();
+  }, [loadModels]);
+
   return {
     models,
     selectedModelId,
     loading,
     error,
     loadModels,
+    refreshModels,
     selectModel,
     setModelFromConversation,
     getModel,

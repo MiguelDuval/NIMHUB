@@ -124,42 +124,14 @@ def get_known_model(raw_id: str) -> Optional[dict]:
 
 
 def infer_capabilities_heuristic(model_id: str) -> list[str]:
-    caps: list[str] = ['chat']
-    id_lower = normalize_model_id(model_id)
-
-    # Reasoning indicators
-    if any(kw in id_lower for kw in ['reasoning', 'r1', 'nemotron', 'deepseek-r1', 'o1', 'qwq']):
-        caps.append('reasoning')
-
-    # Vision indicators
-    if any(kw in id_lower for kw in ['vision', 'vlm', 'llava', 'qwen-vl', 'pixtral', 'gpt-4o', 'gemini']):
-        caps.append('vision')
-
-    # Tool calling - only for models we're confident support it
-    # Require explicit indicators: instruct/chat/nemotron/llama-3/mistral/reasoning
-    # AND not a base/pretrain model
-    is_base = any(kw in id_lower for kw in ['base', 'pretrain'])
-    has_tool_indicators = any(kw in id_lower for kw in ['instruct', 'chat', 'nemotron', 'llama-3', 'mistral', 'reasoning', 'r1', 'deepseek-r1', 'o1', 'qwq'])
-    if not is_base and has_tool_indicators:
-        caps.append('tool-calling')
-
-    # Image generation
-    if any(kw in id_lower for kw in ['flux', 'stable-diffusion', 'sdxl', 'qwen-image', 'dall-e', 'midjourney']):
-        caps.append('image-generation')
-
-    # Video generation
-    if any(kw in id_lower for kw in ['video', 'svd', 'stable-video', 'gen-2', 'gen-3', 'sora']):
-        caps.append('video-generation')
-
-    # ASR
-    if any(kw in id_lower for kw in ['asr', 'whisper', 'speech-to-text', 'stt']):
-        caps.append('asr')
-
-    # TTS
-    if any(kw in id_lower for kw in ['tts', 'text-to-speech', 'parakeet', 'bark', 'xtts']):
-        caps.append('tts')
-
-    return caps
+    """
+    Conservative heuristic inference - only returns ['chat'] for unknown models.
+    Does NOT infer capabilities from model name patterns.
+    All capabilities beyond 'chat' must come from verified registry.
+    """
+    # Conservative default: only 'chat' capability
+    # All other capabilities must come from verified registry
+    return ['chat']
 
 
 def infer_endpoint_family(capabilities: list[str]) -> str:

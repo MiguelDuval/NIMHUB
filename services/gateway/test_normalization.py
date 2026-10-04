@@ -20,8 +20,8 @@ def test_known_models():
 
 
 def test_heuristic_fallback():
-    """Test heuristic inference for unknown models."""
-    # Unknown model - conservative defaults (chat only, no tool-calling without indicators)
+    """Test heuristic inference for unknown models - CONSERVATIVE ONLY."""
+    # Unknown model - conservative defaults (chat only, NO inferred capabilities)
     raw = {'id': 'unknown/new-model', 'name': 'Unknown Model'}
     result = normalize_nim_model(raw)
     assert result.capability_source == 'heuristic'
@@ -30,58 +30,47 @@ def test_heuristic_fallback():
     assert result.max_output_tokens is None
     print(f'✓ unknown/new-model: {result.capabilities} source={result.capability_source}')
 
-    # Model with tool-calling indicators
+    # Model with NO heuristic inference - even with suggestive names
     raw = {'id': 'meta/llama-3-chat', 'name': 'Llama 3 Chat'}
     result = normalize_nim_model(raw)
-    assert 'tool-calling' in result.capabilities
+    # Conservative heuristic ONLY returns ['chat'] - no inference from name
+    assert result.capabilities == ['chat'], f'Conservative heuristic should only return chat, got {result.capabilities}'
     print(f'✓ meta/llama-3-chat: {result.capabilities} source={result.capability_source}')
 
-    # Vision model detection - no tool-calling unless indicators present
+    # Vision model detection - NO heuristic inference
     raw = {'id': 'some/vision-model', 'name': 'Vision Model'}
     result = normalize_nim_model(raw)
-    assert 'vision' in result.capabilities
-    assert 'image' in result.input_modalities
-    assert 'tool-calling' not in result.capabilities, 'Vision model without tool indicators should not get tool-calling'
+    assert result.capabilities == ['chat'], f'Conservative heuristic should only return chat, got {result.capabilities}'
     print(f'✓ some/vision-model: {result.capabilities} source={result.capability_source}')
 
-    # Reasoning model detection
+    # Reasoning model detection - NO heuristic inference
     raw = {'id': 'deepseek-r1', 'name': 'DeepSeek R1'}
     result = normalize_nim_model(raw)
-    assert 'reasoning' in result.capabilities
-    assert 'tool-calling' in result.capabilities  # deepseek-r1 has reasoning indicator
+    assert result.capabilities == ['chat'], f'Conservative heuristic should only return chat, got {result.capabilities}'
     print(f'✓ deepseek-r1: {result.capabilities} source={result.capability_source}')
 
-    # Image generation detection
+    # Image generation - NO heuristic inference
     raw = {'id': 'flux', 'name': 'Flux'}
     result = normalize_nim_model(raw)
-    assert 'image-generation' in result.capabilities
-    assert 'image' in result.output_modalities
-    assert result.endpoint_family == 'image'
-    # flux doesn't have tool-calling indicators
+    assert result.capabilities == ['chat'], f'Conservative heuristic should only return chat, got {result.capabilities}'
     print(f'✓ flux: {result.capabilities} source={result.capability_source}')
 
-    # Video generation detection
+    # Video generation - NO heuristic inference
     raw = {'id': 'stable-video', 'name': 'Stable Video'}
     result = normalize_nim_model(raw)
-    assert 'video-generation' in result.capabilities
-    assert 'video' in result.output_modalities
-    assert result.endpoint_family == 'video'
+    assert result.capabilities == ['chat'], f'Conservative heuristic should only return chat, got {result.capabilities}'
     print(f'✓ stable-video: {result.capabilities} source={result.capability_source}')
 
-    # ASR detection
+    # ASR - NO heuristic inference
     raw = {'id': 'whisper', 'name': 'Whisper'}
     result = normalize_nim_model(raw)
-    assert 'asr' in result.capabilities
-    assert 'audio' in result.input_modalities
-    assert result.endpoint_family == 'speech'
+    assert result.capabilities == ['chat'], f'Conservative heuristic should only return chat, got {result.capabilities}'
     print(f'✓ whisper: {result.capabilities} source={result.capability_source}')
 
-    # TTS detection
+    # TTS - NO heuristic inference
     raw = {'id': 'parakeet', 'name': 'Parakeet'}
     result = normalize_nim_model(raw)
-    assert 'tts' in result.capabilities
-    assert 'audio' in result.output_modalities
-    assert result.endpoint_family == 'speech'
+    assert result.capabilities == ['chat'], f'Conservative heuristic should only return chat, got {result.capabilities}'
     print(f'✓ parakeet: {result.capabilities} source={result.capability_source}')
 
 
