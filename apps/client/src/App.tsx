@@ -352,11 +352,10 @@ export default function App() {
     }
   }, [agentMode, canUseAgent, resetAgent]);
 
-  const isLoading = conversationsLoading || modelsLoading;
   const allErrors = [modelsError, attachmentError, chatError, conversationsError, gatewayError]
     .filter(Boolean) as Error[];
 
-  if (isLoading) {
+  if (conversationsLoading) {
     return (
       <main className="shell">
         <div className="loading-overlay">
