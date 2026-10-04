@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useConversations } from './hooks/useConversations';
 import { useModels } from './hooks/useModels';
 import { useChat } from './hooks/useChat';
+import { useAgent } from './hooks/useAgent';
 import { useAttachments } from './hooks/useAttachments';
 import { useGlobalEvents } from './hooks/useGlobalEvents';
 import { storage } from './services/storage';
@@ -12,6 +13,7 @@ import { ModelSelector } from './components/ModelSelector';
 import { ConversationList } from './components/ConversationList';
 import { WelcomeMessage } from './components/WelcomeMessage';
 import { Composer } from './components/Composer';
+import { AgentApprovalCard } from './components/AgentApprovalCard';
 import './styles.css';
 
 const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL ?? 'http://127.0.0.1:8787';
@@ -70,6 +72,7 @@ export default function App() {
   const [showSidebar, setShowSidebar] = useState(true);
   const [showModelDetails, setShowModelDetails] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [agentMode, setAgentMode] = useState(false);
 
   const selectedModel = useMemo(() => models.find((m) => m.id === selectedModelId), [models, selectedModelId]);
   const chatMessages = useMemo((): ChatMessage[] => storedMessages.map(storedToChatMessage), [storedMessages]);
@@ -105,7 +108,7 @@ export default function App() {
     const text = inputMessage.trim();
     if (!text && attachments.length === 0) return;
     if (!selectedModelId) return;
-    if (status === 'streaming' || status === 'pending') return;
+    if (effectiveBusy) return;
     if (!currentConversation) return;
 
     let content: string | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail?: 'auto' | 'high' | 'low' } }> = text;
@@ -117,7 +120,14 @@ export default function App() {
     // Persist user message
     await addMessage(currentConversation.id, 'user', content);
     const apiMessages = [...chatMessages, { role: 'user' as const, content }];
-    
+
+    if (agentMode) {
+      await runAgent(apiMessages);
+      setInputMessage('');
+      clearAttachments();
+      return;
+    }
+
     // Create assistant placeholder message BEFORE streaming starts
     const assistantMsg = await addMessage(currentConversation.id, 'assistant', '');
     const assistantMessageId = assistantMsg.id;
@@ -127,14 +137,15 @@ export default function App() {
     
     // Send with the assistant message ID for streaming updates
     await send(apiMessages, { stream: true, assistantMessageId });
-  }, [inputMessage, attachments, selectedModelId, status, currentConversation, chatMessages, addMessage, clearAttachments, send, getAttachmentContent]);
+  }, [inputMessage, attachments, selectedModelId, effectiveBusy, currentConversation, chatMessages, addMessage, clearAttachments, send, getAttachmentContent, agentMode, runAgent]);
 
   const handleNewConversation = useCallback(async () => {
     if (!selectedModelId) return;
     const conversation = await createConversation(selectedModelId);
     await selectConversation(conversation.id);
     setStreamingContent('');
-  }, [selectedModelId, createConversation, selectConversation]);
+    resetAgent();
+  }, [selectedModelId, createConversation, selectConversation, resetAgent]);
 
   const handleModelChange = useCallback(
     (modelId: string) => {
@@ -150,12 +161,13 @@ export default function App() {
     async (conversationId: string) => {
       const conversation = await selectConversation(conversationId);
       setStreamingContent('');
+      resetAgent();
       // Sync model with conversation (use the returned conversation, not stale state)
       if (conversation) {
         setModelFromConversation(conversation.modelId);
       }
     },
-    [selectConversation, setModelFromConversation]
+    [selectConversation, setModelFromConversation, resetAgent]
   );
 
   const handleDeleteConversation = useCallback(
@@ -175,12 +187,49 @@ export default function App() {
     setStreamingContent('');
   }, [abort]);
 
-  const canSend = useMemo((): boolean =>
-      Boolean(inputMessage.trim() || attachments.length > 0) &&
-      Boolean(selectedModelId) &&
-      (status === 'idle' || status === 'success' || status === 'error'),
-    [inputMessage, attachments.length, selectedModelId, status]
+
+  const persistAgentMessages = useCallback(
+    async (messagesToPersist: import('./types').ChatMessage[]) => {
+      if (!currentConversation) return;
+      for (const message of messagesToPersist) {
+        await addMessage(
+          currentConversation.id,
+          message.role,
+          message.content,
+          {
+            tool_calls: message.tool_calls,
+            tool_call_id: message.tool_call_id,
+            name: message.name,
+          },
+        );
+      }
+    },
+    [addMessage, currentConversation],
   );
+
+  const {
+    status: agentStatus,
+    error: agentError,
+    approvals: agentApprovals,
+    run: runAgent,
+    approve: approveAgent,
+    reject: rejectAgent,
+    reset: resetAgent,
+  } = useAgent({
+    modelId: selectedModelId,
+    onMessages: persistAgentMessages,
+  });
+
+  const canUseAgent = selectedModel?.capabilities.includes('tool-calling') ?? false;
+  const effectiveBusy =
+    status === 'streaming' ||
+    status === 'pending' ||
+    agentStatus === 'running';
+
+  const agentDisplayError = agentError
+    ? [agentError.message, agentError.code].filter(Boolean).join(' · ')
+    : null;
+
 
   const isLoading = conversationsLoading || modelsLoading;
   const allErrors = [modelsError, attachmentError, chatError].filter(Boolean) as Error[];
