@@ -12,9 +12,9 @@ export type ChatStatus = 'idle' | 'pending' | 'streaming' | 'success' | 'error' 
 interface UseChatOptions {
   modelId: string;
   messages: ChatMessage[];
-  onChunk?: (content: string) => void;
-  onComplete?: (response: ChatCompletionResponse) => void;
-  onError?: (error: APIError) => void;
+  onChunk?: (content: string, assistantMessageId?: string) => void;
+  onComplete?: (response: ChatCompletionResponse, assistantMessageId?: string) => void;
+  onError?: (error: APIError, assistantMessageId?: string) => void;
 }
 
 interface UseChatReturn {
@@ -22,7 +22,7 @@ interface UseChatReturn {
   error: APIError | null;
   abort: () => void;
   retry: () => Promise<void>;
-  send: (messages: ChatMessage[], options?: { stream?: boolean }) => Promise<ChatCompletionResponse | void>;
+  send: (messages: ChatMessage[], options?: { stream?: boolean; assistantMessageId?: string }) => Promise<ChatCompletionResponse | void>;
   isRetryable: boolean;
 }
 
@@ -79,8 +79,8 @@ export function useChat({
   }, []);
 
   const send = useCallback(
-    async (msgs: ChatMessage[], options: { stream?: boolean } = {}): Promise<ChatCompletionResponse | void> => {
-      const { stream = true } = options;
+    async (msgs: ChatMessage[], options: { stream?: boolean; assistantMessageId?: string } = {}): Promise<ChatCompletionResponse | void> => {
+      const { stream = true, assistantMessageId } = options;
 
       // Create new abort controller for this request
       abortControllerRef.current = new AbortController();
@@ -113,7 +113,7 @@ export function useChat({
             const delta = chunk.choices[0]?.delta?.content;
             if (delta) {
               accumulatedContent += delta;
-              onChunkRef.current?.(accumulatedContent);
+              onChunkRef.current?.(accumulatedContent, assistantMessageId);
             }
 
             // Check for finish
@@ -125,12 +125,28 @@ export function useChat({
           if (!signal.aborted && isMountedRef.current) {
             setStatus('success');
             retryCountRef.current = 0;
+            // Create a minimal response object for the callback
+            const response: ChatCompletionResponse = {
+              id: `chatcmpl-${Date.now()}`,
+              object: 'chat.completion',
+              created: Math.floor(Date.now() / 1000),
+              model: modelId,
+              choices: [{
+                index: 0,
+                message: {
+                  role: 'assistant',
+                  content: accumulatedContent,
+                },
+                finish_reason: 'stop',
+              }],
+            };
+            onCompleteRef.current?.(response, assistantMessageId);
           }
         } else {
           const response = await api.chat(request);
           if (!signal.aborted && isMountedRef.current) {
             setStatus('success');
-            onCompleteRef.current?.(response);
+            onCompleteRef.current?.(response, assistantMessageId);
             retryCountRef.current = 0;
             return response;
           }
@@ -152,7 +168,7 @@ export function useChat({
 
         setError(apiError);
         setStatus('error');
-        onErrorRef.current?.(apiError);
+        onErrorRef.current?.(apiError, assistantMessageId);
       }
     },
     [modelId]

@@ -75,19 +75,25 @@ export default function App() {
   const { status, error: chatError, abort, retry, send, isRetryable } = useChat({
     modelId: selectedModelId,
     messages: chatMessages,
-    onChunk: (content) => {
+    onChunk: (content, assistantMessageId) => {
       setStreamingContent(content);
-      if (currentConversation) updateLastMessage(currentConversation.id, content);
+      if (currentConversation && assistantMessageId) {
+        // Update the specific assistant message by ID
+        storage.updateMessage(assistantMessageId, { content });
+      }
     },
-    onComplete: (response) => {
+    onComplete: (response, assistantMessageId) => {
       const content = response.choices[0]?.message?.content ?? '';
-      // Message already persisted via onChunk -> updateLastMessage
+      // Message already persisted via onChunk -> updateMessage
       // No need to add again
       setStreamingContent('');
       setRetryCount(0);
     },
-    onError: (err) => {
-      if (currentConversation) addMessage(currentConversation.id, 'assistant', 'Error: ' + err.message);
+    onError: (err, assistantMessageId) => {
+      if (currentConversation && assistantMessageId) {
+        // Update the specific assistant message with error
+        storage.updateMessage(assistantMessageId, { content: 'Error: ' + err.message });
+      }
       setStreamingContent('');
       setRetryCount(0);
     },
@@ -106,11 +112,19 @@ export default function App() {
       content = [...(text ? [{ type: 'text' as const, text }] : []), ...attachmentContents];
     }
 
+    // Persist user message
     await addMessage(currentConversation.id, 'user', content);
     const apiMessages = [...chatMessages, { role: 'user' as const, content }];
+    
+    // Create assistant placeholder message BEFORE streaming starts
+    const assistantMsg = await addMessage(currentConversation.id, 'assistant', '');
+    const assistantMessageId = assistantMsg.id;
+
     setInputMessage('');
     clearAttachments();
-    await send(apiMessages, { stream: true });
+    
+    // Send with the assistant message ID for streaming updates
+    await send(apiMessages, { stream: true, assistantMessageId });
   }, [inputMessage, attachments, selectedModelId, status, currentConversation, chatMessages, addMessage, clearAttachments, send, getAttachmentContent]);
 
   const handleNewConversation = useCallback(async () => {

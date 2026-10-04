@@ -224,7 +224,19 @@ export const storage = {
   },
 
   /**
-   * Update the last message (for streaming updates)
+   * Update a specific message by ID (for streaming updates)
+   */
+  async updateMessage(messageId: string, updates: Partial<Pick<StoredMessage, 'content' | 'finishReason'>>): Promise<void> {
+    const db = await getDB();
+    const message = await db.get('messages', messageId);
+    if (!message) return;
+
+    const updated = { ...message, ...updates };
+    await db.put('messages', updated);
+  },
+
+  /**
+   * Update the last message (for streaming updates - legacy)
    */
   async updateLastMessage(conversationId: string, content: string): Promise<void> {
     const db = await getDB();
