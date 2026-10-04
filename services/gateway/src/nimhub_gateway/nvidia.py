@@ -38,7 +38,7 @@ KNOWN_MODELS: dict[str, dict] = {
         "output_modalities": ["text"],
         "capabilities": ["chat", "reasoning", "tool-calling"],
         "context_window": 262144,  # NVIDIA docs: native 262,144, configurable up to 1,048,576
-        "max_output_tokens": 4096,
+        "max_output_tokens": 16384,
     },
     "nvidia/nemotron-4-340b": {
         "name": "Nemotron 4 340B",
