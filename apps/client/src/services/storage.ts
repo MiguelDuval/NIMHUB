@@ -318,7 +318,7 @@ export const storage = {
   /**
    * Clear all data (for testing/reset)
    */
-  async clearAll(): Promise<void>
+  async clearAll(): Promise<void> {
     const db = await getDB();
     await db.clear('conversations');
     await db.clear('messages');
