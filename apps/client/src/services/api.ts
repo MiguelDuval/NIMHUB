@@ -191,8 +191,9 @@ function normalizeDirectModels(data: any): ModelCapabilityInfo[] {
             ].includes(item as ModelCapability),
         )
       : [];
-    const capabilities: ModelCapability[] =
-      rawCapabilities.length > 0 ? rawCapabilities : inferred?.capabilities ?? ['chat'];
+    const capabilities: ModelCapability[] = inferred
+      ? Array.from(new Set([...rawCapabilities, ...inferred.capabilities]))
+      : rawCapabilities.length > 0 ? rawCapabilities : ['chat'];
     const endpointFamily = (
       typeof model.endpoint_family === 'string' &&
       ['chat', 'image', 'video', 'speech', 'embedding'].includes(model.endpoint_family)
