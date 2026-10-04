@@ -44,6 +44,15 @@ export function useChat({
   const isMountedRef = useRef(true);
   // Store the last sent messages for retry
   const lastSentMessagesRef = useRef<ChatMessage[]>(initialMessages);
+  // Use refs for callbacks to avoid re-creating send/retry
+  const onChunkRef = useRef(onChunk);
+  const onCompleteRef = useRef(onComplete);
+  const onErrorRef = useRef(onError);
+
+  // Update refs when callbacks change
+  useEffect(() => { onChunkRef.current = onChunk; }, [onChunk]);
+  useEffect(() => { onCompleteRef.current = onComplete; }, [onComplete]);
+  useEffect(() => { onErrorRef.current = onError; }, [onError]);
 
   // Update ref when messages change (for retry to use current messages)
   useEffect(() => {
@@ -104,7 +113,7 @@ export function useChat({
             const delta = chunk.choices[0]?.delta?.content;
             if (delta) {
               accumulatedContent += delta;
-              onChunk?.(accumulatedContent);
+              onChunkRef.current?.(accumulatedContent);
             }
 
             // Check for finish
@@ -121,7 +130,7 @@ export function useChat({
           const response = await api.chat(request);
           if (!signal.aborted && isMountedRef.current) {
             setStatus('success');
-            onComplete?.(response);
+            onCompleteRef.current?.(response);
             retryCountRef.current = 0;
             return response;
           }
@@ -143,10 +152,10 @@ export function useChat({
 
         setError(apiError);
         setStatus('error');
-        onError?.(apiError);
+        onErrorRef.current?.(apiError);
       }
     },
-    [modelId, onChunk, onComplete, onError]
+    [modelId]
   );
 
   const retry = useCallback(async () => {
