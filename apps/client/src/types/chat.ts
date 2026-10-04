@@ -8,7 +8,7 @@ export type ChatRole = 'system' | 'user' | 'assistant' | 'tool';
 
 export interface ChatMessage {
   role: ChatRole;
-  content: string | ChatMessageContent[];
+  content: string | ChatMessageContent[] | null;
   name?: string;
   tool_call_id?: string;
   tool_calls?: ChatToolCall[];
@@ -110,7 +110,7 @@ export interface StoredMessage {
   id: string;
   conversationId: string;
   role: ChatRole;
-  content: string | ChatMessageContent[];
+  content: string | ChatMessageContent[] | null;
   createdAt: string;
   tool_calls?: ChatToolCall[];
   tool_call_id?: string;
