@@ -476,6 +476,7 @@ class MCPRegistry:
         return token
 
     def _enforce_policy(
+        self,
         tool: MCPToolDefinition,
         *,
         arguments_sha256: str,
