@@ -83,7 +83,9 @@ public class NimhubMediaHttpPlugin extends Plugin {
 
             try (OutputStream output = connection.getOutputStream()) {
                 if (fields != null) {
-                    for (String name : fields.keys()) {
+                    java.util.Iterator<String> names = fields.keys();
+                    while (names.hasNext()) {
+                        String name = names.next();
                         Object value = fields.opt(name);
                         if (value != null) writeTextPart(output, boundary, name, String.valueOf(value));
                     }
