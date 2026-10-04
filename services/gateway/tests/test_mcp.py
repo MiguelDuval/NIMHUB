@@ -31,6 +31,13 @@ def registry(permission: str = "read") -> MCPRegistry:
     )
 
 
+async def discovered(reg: MCPRegistry) -> dict[str, object]:
+    return {
+        tool.name: tool
+        for tool in await reg.list_all_tools()
+    }
+
+
 def test_parse_mcp_servers_rejects_duplicates() -> None:
     raw = json.dumps(
         [
@@ -45,17 +52,21 @@ def test_parse_mcp_servers_rejects_duplicates() -> None:
 @pytest.mark.asyncio
 async def test_stdio_discovery_and_call_are_end_to_end() -> None:
     reg = registry()
-    tools = await reg.list_all_tools()
+    tools = await discovered(reg)
 
-    assert len(tools) == 1
-    tool = tools[0]
-    assert tool.qualified_name == "deterministic.deterministic_echo"
-    assert tool.read_only is True
-    assert tool.requires_approval is False
+    assert set(tools) == {"deterministic_echo", "protected_write"}
+    echo = tools["deterministic_echo"]
+    assert echo.qualified_name == "deterministic.deterministic_echo"
+    assert echo.read_only is True
+    assert echo.requires_approval is False
+
+    protected = tools["protected_write"]
+    assert protected.destructive is True
+    assert protected.requires_approval is True
 
     result = await reg.call_tool(
         MCPToolCallRequest(
-            tool=tool.model_name,
+            tool=echo.model_name,
             arguments={"value": "hello"},
         )
     )
@@ -69,65 +80,70 @@ async def test_stdio_discovery_and_call_are_end_to_end() -> None:
 @pytest.mark.asyncio
 async def test_invalid_arguments_are_rejected_before_execution() -> None:
     reg = registry()
-    tool = (await reg.list_all_tools())[0]
+    echo = (await discovered(reg))["deterministic_echo"]
 
     with pytest.raises(ValueError, match="Invalid arguments"):
         await reg.call_tool(
             MCPToolCallRequest(
-                tool=tool.model_name,
+                tool=echo.model_name,
                 arguments={"unexpected": "value"},
             )
         )
 
 
 @pytest.mark.asyncio
-async def test_read_policy_blocks_unknown_behavior() -> None:
+async def test_read_policy_blocks_non_read_only_tool() -> None:
     reg = registry(permission="read")
-    tool = (await reg.list_all_tools())[0]
+    protected = (await discovered(reg))["protected_write"]
 
-    # The read-only fixture is still explicitly allowed.
-    assert (
+    with pytest.raises(MCPPolicyError):
         await reg.authorize_tool_call(
-            tool,
-            {"value": "safe"},
+            protected,
+            {"value": "blocked"},
             [],
         )
-    ) == canonical_arguments_sha256({"value": "safe"})
 
 
 @pytest.mark.asyncio
-async def test_write_policy_requires_exact_argument_approval() -> None:
+async def test_write_policy_allows_explicit_read_only_tool() -> None:
     reg = registry(permission="write")
-    tool = (await reg.list_all_tools())[0]
-    arguments = {"value": "hello"}
+    echo = (await discovered(reg))["deterministic_echo"]
+    arguments = {"value": "safe"}
 
-    # The deterministic tool is explicitly read-only, so write policy can still
-    # auto-execute it. This proves policy is an upper bound rather than a blanket
-    # approval requirement for every tool.
-    digest = await reg.authorize_tool_call(tool, arguments, [])
+    digest = await reg.authorize_tool_call(echo, arguments, [])
     assert digest == canonical_arguments_sha256(arguments)
 
-    changed = {"value": "changed"}
+
+@pytest.mark.asyncio
+async def test_destructive_policy_requires_exact_argument_approval() -> None:
+    reg = registry(permission="destructive")
+    protected = (await discovered(reg))["protected_write"]
+    arguments = {"value": "hello"}
+
     with pytest.raises(MCPApprovalRequired):
-        # Simulate a future non-read-only tool by changing the normalized flag.
-        tool.requires_approval = True
-        tool.read_only = False
-        await reg.authorize_tool_call(tool, changed, [])
+        await reg.authorize_tool_call(protected, arguments, [])
 
-    changed_digest = canonical_arguments_sha256(changed)
+    digest = canonical_arguments_sha256(arguments)
     grant = MCPApprovalGrant(
-        tool=tool.qualified_name,
-        arguments_sha256=changed_digest,
+        tool=protected.qualified_name,
+        arguments_sha256=digest,
     )
-    assert (
-        await reg.authorize_tool_call(tool, changed, [grant])
-    ) == changed_digest
+    assert await reg.authorize_tool_call(protected, arguments, [grant]) == digest
 
-    # A stale grant cannot authorize a modified payload.
+    result = await reg.call_tool(
+        MCPToolCallRequest(
+            tool=protected.qualified_name,
+            arguments=arguments,
+            approval_grants=[grant],
+        )
+    )
+    assert result.is_error is False
+    assert result.content[0]["text"] == "protected:hello"
+
     with pytest.raises(MCPApprovalRequired):
         await reg.authorize_tool_call(
-            tool,
-            {"value": "changed-again"},
+            protected,
+            {"value": "changed"},
             [grant],
         )
 
