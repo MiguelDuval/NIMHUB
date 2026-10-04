@@ -15,6 +15,13 @@ const config: CapacitorConfig = {
     // Required when the secure localhost WebView calls a personal HTTP gateway.
     allowMixedContent: true,
   },
+  plugins: {
+    // Route fetch/XHR through Capacitor's native HTTP implementation on Android.
+    // This lets the APK call hosted NVIDIA APIs without browser CORS restrictions.
+    CapacitorHttp: {
+      enabled: true,
+    },
+  },
 };
 
 export default config;
