@@ -10,7 +10,6 @@ interface GatewaySettingsProps {
   error: Error | null;
   onSave: (value: string) => Promise<void>;
   onTest: (value: string) => Promise<HealthResponse>;
-  onRefresh: () => Promise<void>;
 }
 
 function statusLabel(
@@ -30,7 +29,6 @@ export function GatewaySettings({
   error,
   onSave,
   onTest,
-  onRefresh,
 }: GatewaySettingsProps) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(url);
