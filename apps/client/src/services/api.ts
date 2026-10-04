@@ -19,7 +19,7 @@ import type {
   AgentStreamEvent,
 } from '../types';
 import { transformModels } from './models';
-import { getGatewayUrl } from './gatewayConfig';
+import { getGatewayUrl, normalizeGatewayUrl } from './gatewayConfig';
 
 export class APIError extends Error {
   public readonly code: string;
@@ -73,7 +73,14 @@ export const api = {
    * Health check endpoint
    */
   async health(): Promise<HealthResponse> {
-    const response = await fetch(`${getGatewayUrl()}/api/health`);
+    return this.healthAt(getGatewayUrl());
+  },
+
+  /**
+   * Probe an explicit gateway URL without changing client configuration.
+   */
+  async healthAt(gatewayUrl: string): Promise<HealthResponse> {
+    const response = await fetch(`${normalizeGatewayUrl(gatewayUrl)}/api/health`);
     return handleResponse<HealthResponse>(response);
   },
 
