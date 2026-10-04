@@ -33,6 +33,10 @@ function normalizeBaseUrl(value: string): string {
  */
 export function normalizeNvidiaApiKey(value: string): string {
   let key = value.trim().replace(/^['"]|['"]$/g, '').trim();
+  if (!key) {
+    throw new Error('NVIDIA API key is required');
+  }
+
   key = key.replace(/^Bearer\s+/i, '').trim();
 
   const labelled = key.match(/^NVAPI\s*(?:[-:=]\s*)?(.+)$/i);
