@@ -128,14 +128,22 @@ async function nativeNvidiaRequest<T>(
       (detail?.message as string | undefined) ??
       `NVIDIA request failed: ${response.status}`;
     const code =
-      (nestedError?.code as string | undefined) ??
-      (detail?.code as string | undefined) ??
-      'NVIDIA_REQUEST_FAILED';
+      response.status === 401 || response.status === 403
+        ? 'NVIDIA_AUTH_FAILED'
+        : response.status === 429
+        ? 'NVIDIA_RATE_LIMITED'
+        : (nestedError?.code as string | undefined) ??
+          (detail?.code as string | undefined) ??
+          'NVIDIA_REQUEST_FAILED';
     throw new APIError(
-      message,
+      response.status === 401 || response.status === 403
+        ? 'NVIDIA rejected the API key'
+        : response.status === 429
+        ? 'NVIDIA rate limit reached'
+        : message,
       code,
       response.status,
-      response.status >= 500,
+      response.status === 429 || response.status >= 500,
       'nvidia',
     );
   }
