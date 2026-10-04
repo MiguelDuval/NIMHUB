@@ -17,8 +17,8 @@ type StoredProfile = Omit<MediaProviderConfig, 'apiKey' | 'usesChatKey'>;
 
 const META_PREFIX = 'nimhub.media.';
 const DEFAULTS: Record<MediaProviderKind, StoredProfile> = {
-  image: { kind: 'image', baseUrl: '', model: 'qwen/qwen-image-2512' },
-  video: { kind: 'video', baseUrl: '', model: 'wan-ai/wan2.2' },
+  image: { kind: 'image', baseUrl: 'https://ai.api.nvidia.com/v1', model: 'nvidia/cosmos3-nano' },
+  video: { kind: 'video', baseUrl: 'https://ai.api.nvidia.com/v1', model: 'nvidia/cosmos3-nano' },
   asr: { kind: 'asr', baseUrl: '', model: 'parakeet-tdt-0.6b' },
   tts: {
     kind: 'tts',
@@ -59,7 +59,7 @@ function readMeta(kind: MediaProviderKind): StoredProfile {
     const parsed = JSON.parse(raw) as Partial<StoredProfile>;
     return {
       kind,
-      baseUrl: typeof parsed.baseUrl === 'string' ? normalizeNvidiaBaseUrl(parsed.baseUrl) : fallback.baseUrl,
+      baseUrl: typeof parsed.baseUrl === 'string' ? (parsed.baseUrl.trim() ? normalizeNvidiaBaseUrl(parsed.baseUrl) : '') : fallback.baseUrl,
       model: typeof parsed.model === 'string' ? parsed.model.trim() : fallback.model,
       ...(kind === 'tts'
         ? { voice: typeof parsed.voice === 'string' ? parsed.voice.trim() : fallback.voice }
@@ -102,9 +102,7 @@ export async function saveMediaProviderConfig(
   if (!model) throw new Error('Model ID is required');
 
   const baseUrl = config.baseUrl.trim();
-  if (!baseUrl) throw new Error('Media API base URL is required');
-
-  const normalizedBaseUrl = normalizeNvidiaBaseUrl(baseUrl);
+  const normalizedBaseUrl = baseUrl ? normalizeNvidiaBaseUrl(baseUrl) : '';
   const normalizedKey = config.apiKey.trim();
 
   if (normalizedKey) {
@@ -120,6 +118,17 @@ export async function saveMediaProviderConfig(
     ...(kind === 'tts' ? { voice: (config.voice ?? '').trim() } : {}),
   };
 
+  window.localStorage.setItem(META_STORAGE[kind], JSON.stringify(payload));
+  window.dispatchEvent(new CustomEvent('nimhub:media-config-changed', { detail: { kind } }));
+}
+
+export async function setMediaProviderModel(kind: MediaProviderKind, model: string, baseUrl: string): Promise<void> {
+  assertNative();
+  const normalizedModel = model.trim();
+  if (!normalizedModel) throw new Error('Media model is required');
+  const normalizedBaseUrl = baseUrl.trim() ? normalizeNvidiaBaseUrl(baseUrl) : '';
+  const current = readMeta(kind);
+  const payload: StoredProfile = { ...current, kind, model: normalizedModel, baseUrl: normalizedBaseUrl };
   window.localStorage.setItem(META_STORAGE[kind], JSON.stringify(payload));
   window.dispatchEvent(new CustomEvent('nimhub:media-config-changed', { detail: { kind } }));
 }
