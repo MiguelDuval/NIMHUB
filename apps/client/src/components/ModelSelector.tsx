@@ -7,6 +7,7 @@ interface ModelSelectorProps {
   selectedModelId: string;
   onChange: (modelId: string) => void;
   disabled?: boolean;
+  loading?: boolean;
   showDetails?: boolean;
   onToggleDetails?: () => void;
   /** Filter to only show models with specific capability */
@@ -18,6 +19,7 @@ export function ModelSelector({
   selectedModelId,
   onChange,
   disabled,
+  loading = false,
   showDetails,
   onToggleDetails,
   filterCapability,
@@ -64,7 +66,9 @@ export function ModelSelector({
         disabled={disabled || availableModels.length === 0}
         className="model-select"
       >
-        {availableModels.length === 0 ? (
+        {loading ? (
+          <option value="">Loading models…</option>
+        ) : availableModels.length === 0 ? (
           <option value="">No models available</option>
         ) : (
           availableModels.map((model) => (
