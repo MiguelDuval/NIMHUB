@@ -523,7 +523,9 @@ class AgentRuntime:
                 function = call.get("function") or {}
                 tool = by_model_name.get(str(function.get("name") or ""))
                 if tool is None:
-                    yield self._tool_error_event(call, f"Unknown model tool: {function.get('name')}")
+                    error = f"Unknown model tool: {function.get('name')}"
+                    messages.append(self._tool_error_message(call, error))
+                    yield self._tool_error_event(call, error)
                     continue
 
                 try:
@@ -545,7 +547,9 @@ class AgentRuntime:
                         )
                     )
                 except Exception as exc:
-                    yield self._tool_error_event(call, str(exc))
+                    error = str(exc)
+                    messages.append(self._tool_error_message(call, error))
+                    yield self._tool_error_event(call, error)
                     continue
                 else:
                     executable.append((call, tool, arguments))
