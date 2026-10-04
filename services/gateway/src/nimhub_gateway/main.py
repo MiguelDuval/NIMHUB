@@ -304,7 +304,10 @@ async def mcp_call(request: MCPToolCallRequest):
 
 
 @app.post("/api/agent")
-async def agent(request: AgentRunRequest):
+async def agent(
+    request: AgentRunRequest,
+    nvidia_api_key: str | None = Header(default=None, alias="X-NVIDIA-API-Key"),
+):
     if not settings.nvidia_api_key:
         raise HTTPException(
             status_code=503,
