@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
-from nimhub_gateway.main import app
+from nimhub_gateway.main import agent_runtime, app
+from nimhub_gateway.settings import settings
 
 
 client = TestClient(app)
