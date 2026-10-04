@@ -24,7 +24,7 @@ import type {
 import { transformModels } from './models';
 import { getGatewayUrl, normalizeGatewayUrl } from './gatewayConfig';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
-import { getNvidiaApiKey, getNvidiaBaseUrl, hasNvidiaApiKey } from './nvidiaConfig';
+import { getNvidiaApiKey, getNvidiaBaseUrl, hasNvidiaApiKey, normalizeNvidiaBaseUrl } from './nvidiaConfig';
 
 export class APIError extends Error {
   public readonly code: string;
