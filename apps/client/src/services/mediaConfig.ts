@@ -57,10 +57,17 @@ function readMeta(kind: MediaProviderKind): StoredProfile {
 
   try {
     const parsed = JSON.parse(raw) as Partial<StoredProfile>;
+    const storedModel = typeof parsed.model === 'string' ? parsed.model.trim() : '';
+    const storedBaseUrl = typeof parsed.baseUrl === 'string' ? parsed.baseUrl.trim() : '';
+    const isLegacyUnconfiguredVisualProfile =
+      (kind === 'image' && storedModel === 'qwen/qwen-image-2512' && !storedBaseUrl) ||
+      (kind === 'video' && storedModel === 'wan-ai/wan2.2' && !storedBaseUrl);
     return {
       kind,
-      baseUrl: typeof parsed.baseUrl === 'string' ? (parsed.baseUrl.trim() ? normalizeNvidiaBaseUrl(parsed.baseUrl) : '') : fallback.baseUrl,
-      model: typeof parsed.model === 'string' ? parsed.model.trim() : fallback.model,
+      baseUrl: isLegacyUnconfiguredVisualProfile
+        ? fallback.baseUrl
+        : (storedBaseUrl ? normalizeNvidiaBaseUrl(storedBaseUrl) : ''),
+      model: isLegacyUnconfiguredVisualProfile ? fallback.model : (storedModel || fallback.model),
       ...(kind === 'tts'
         ? { voice: typeof parsed.voice === 'string' ? parsed.voice.trim() : fallback.voice }
         : {}),
