@@ -25,9 +25,9 @@ Priority order:
 
 ## Architecture
 Keep the main topology simple:
-Android APK (Capacitor + React/TypeScript) -> personal FastAPI gateway -> provider adapters -> NVIDIA NIM / MCP / tools.
+Android APK (Capacitor + React/TypeScript) -> NVIDIA NIM directly for core chat/model discovery, with an optional personal FastAPI gateway -> MCP / Agent / GitHub / server-side tools.
 
-The gateway is the trust boundary for NVIDIA/GitHub credentials, validation, provider routing, streaming normalization, agent execution, MCP, persistence and jobs.
+The gateway remains the trust boundary for server-side credentials and tools. On Android, the NVIDIA API key may be stored in Android Keystore-backed app storage and used directly for core NIM requests; it must never be placed in source code, APK assets, or browser localStorage.
 
 Do not expose long-lived provider credentials to client JavaScript.
 
@@ -42,7 +42,7 @@ Verify volatile API details against:
 
 Required core behavior includes NIM model discovery, streamed LLM/VLM chat, tool calling and capability-aware image input. Visual generation and speech remain separate adapter families.
 
-Never assume current free endpoints, quotas, model IDs or availability are permanent.
+Never assume current free endpoints, quotas, model IDs or availability are permanent. The Android client uses Capacitor's native HTTP transport for hosted NIM so browser CORS is not part of the core runtime path.
 
 ## Model registry
 Represent provider, model ID, endpoint family, input/output modalities, reasoning/tool support and discovery timestamp. Use live discovery where possible and small configuration hints where it is not.
@@ -88,7 +88,7 @@ Start with embedded persistence. Store conversations, settings, jobs and artifac
 Make the Android application excellent on phone dimensions and touch input. Do not develop separate web, desktop or iOS products. Capacitor is the native Android shell.
 
 ## Security
-Never commit secrets. Never log API keys or authorization headers. Never put long-lived credentials in localStorage. Bind local development to localhost by default. Sensitive agent writes require approval.
+Never commit secrets. Never log API keys or authorization headers. Never put long-lived credentials in localStorage. Android-stored NVIDIA credentials must use Keystore-backed secure storage. Gateway exposure is optional and LAN-only by default. Sensitive agent writes require approval.
 
 ## Engineering loop
 Observe -> plan -> implement -> test -> inspect -> fix -> document -> commit -> push -> continue.
