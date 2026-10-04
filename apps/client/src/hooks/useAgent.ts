@@ -11,7 +11,7 @@ export type AgentStatus = 'idle' | 'running' | 'approval_required' | 'success' |
 
 interface UseAgentOptions {
   modelId: string;
-  onMessages?: (messages: ChatMessage[]) => void;
+  onMessages?: (messages: ChatMessage[]) => void | Promise<void>;
   onComplete?: (response: AgentRunResponse) => void;
 }
 
@@ -23,7 +23,7 @@ interface UseAgentReturn {
   run: (messages: ChatMessage[]) => Promise<void>;
   approve: () => Promise<void>;
   abort: () => void;
-  reject: () => void;
+  reject: () => Promise<void>;
   reset: () => void;
 }
 
@@ -165,7 +165,6 @@ export function useAgent({
           case 'tool_result':
           case 'tool_error':
           case 'continue':
-            // Tool progress is represented by the final gateway conversation state.
             break;
           default:
             break;
@@ -261,12 +260,34 @@ export function useAgent({
     setStatus('cancelled');
   }, []);
 
-  const reject = useCallback(() => {
+  const reject = useCallback(async () => {
+    const deniedApprovals = approvals;
     runIdRef.current += 1;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+
+    const deniedMessages: ChatMessage[] = deniedApprovals.map((approval) => ({
+      role: 'tool',
+      tool_call_id: approval.tool_call_id,
+      content: JSON.stringify({
+        ok: false,
+        error: 'User denied this tool call.',
+      }),
+    }));
+
+    continuationRef.current = [...continuationRef.current, ...deniedMessages];
+    previousLengthRef.current = continuationRef.current.length;
     setStreamingText('');
+    setError(null);
+
+    if (deniedMessages.length > 0) {
+      await onMessages?.(deniedMessages);
+    }
+
+    if (!mountedRef.current) return;
     setApprovals([]);
     setStatus('idle');
-  }, []);
+  }, [approvals, onMessages]);
 
   const reset = useCallback(() => {
     runIdRef.current += 1;
