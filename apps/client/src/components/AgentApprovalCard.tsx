@@ -2,8 +2,8 @@ import type { AgentApprovalRequest } from '../types';
 
 interface AgentApprovalCardProps {
   approvals: AgentApprovalRequest[];
-  onApprove: () => void;
-  onReject: () => void;
+  onApprove: () => void | Promise<void>;
+  onReject: () => void | Promise<void>;
   busy?: boolean;
 }
 
