@@ -19,8 +19,6 @@ import { AgentApprovalCard } from './components/AgentApprovalCard';
 import { GatewaySettings } from './components/GatewaySettings';
 import './styles.css';
 
-const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL ?? 'http://127.0.0.1:8787';
-
 function storedToChatMessage(msg: StoredMessage): ChatMessage {
   return {
     role: msg.role,
