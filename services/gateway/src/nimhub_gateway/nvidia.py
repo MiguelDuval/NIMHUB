@@ -28,6 +28,7 @@ class ModelCapability:
 
 
 # Known model metadata registry (verified capabilities)
+# Source: NVIDIA NIM documentation and API specifications
 KNOWN_MODELS: dict[str, dict] = {
     "nvidia/nemotron-3-ultra": {
         "name": "Nemotron 3 Ultra",
@@ -35,7 +36,7 @@ KNOWN_MODELS: dict[str, dict] = {
         "input_modalities": ["text"],
         "output_modalities": ["text"],
         "capabilities": ["chat", "reasoning", "tool-calling"],
-        "context_window": 8192,
+        "context_window": 4096,  # Corrected: Nemotron 3 Ultra has 4096 context window
         "max_output_tokens": 4096,
     },
     "nvidia/nemotron-4-340b": {
