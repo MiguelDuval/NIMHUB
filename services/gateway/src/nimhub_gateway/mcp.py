@@ -10,6 +10,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import secrets
+import time
 from contextlib import asynccontextmanager
 from os import environ
 from typing import Any, Literal
@@ -35,10 +37,11 @@ class MCPPolicyError(MCPConfigError):
 class MCPApprovalRequired(MCPConfigError):
     """Raised when a tool call is valid but needs an explicit approval grant."""
 
-    def __init__(self, tool: "MCPToolDefinition", arguments_sha256: str) -> None:
+    def __init__(self, tool: "MCPToolDefinition", arguments_sha256: str, approval_token: str) -> None:
         super().__init__(f"Approval required for MCP tool {tool.qualified_name}")
         self.tool = tool
         self.arguments_sha256 = arguments_sha256
+        self.approval_token = approval_token
 
 
 class MCPServerConfig(BaseModel):
@@ -115,7 +118,7 @@ class MCPApprovalGrant(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    tool: str = Field(min_length=1, max_length=200)
+    approval_token: str = Field(min_length=32, max_length=200)
     arguments_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
@@ -304,6 +307,8 @@ class MCPRegistry:
 
     def __init__(self, servers: list[MCPServerConfig]):
         self._servers = {server.id: server for server in servers}
+        self._pending_approvals: dict[str, tuple[str, str, float]] = {}
+        self._approval_ttl_seconds = 600.0
 
     @classmethod
     def from_json(cls, raw: str | None) -> "MCPRegistry":
