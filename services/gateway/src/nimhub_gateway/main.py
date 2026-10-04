@@ -211,7 +211,10 @@ async def models(
 
 
 @app.post("/api/chat")
-async def chat(request: ChatRequest):
+async def chat(
+    request: ChatRequest,
+    nvidia_api_key: str | None = Header(default=None, alias="X-NVIDIA-API-Key"),
+):
     payload = request.model_dump(exclude_none=True)
     # Validate API key early to return proper HTTP error before streaming starts.
     if not settings.nvidia_api_key:
