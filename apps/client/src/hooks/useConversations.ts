@@ -63,10 +63,13 @@ export function useConversations() {
     try {
       await storage.deleteConversation(id);
       setConversations((prev) => prev.filter((c) => c.id !== id));
-      if (currentConversation?.id === id) {
-        setCurrentConversation(null);
-        setMessages([]);
-      }
+      setCurrentConversation((prev) => {
+        if (prev?.id === id) {
+          setMessages([]);
+          return null;
+        }
+        return prev;
+      });
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to delete conversation'));
     }
@@ -78,9 +81,11 @@ export function useConversations() {
       setConversations((prev) =>
         prev.map((c) => (c.id === id ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c))
       );
-      if (currentConversation?.id === id) {
-        setCurrentConversation((prev) => (prev ? { ...prev, ...updates, updatedAt: new Date().toISOString() } : null));
-      }
+      setCurrentConversation((prev) =>
+        prev?.id === id
+          ? { ...prev, ...updates, updatedAt: new Date().toISOString() }
+          : prev,
+      );
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to update conversation'));
     }
@@ -102,11 +107,11 @@ export function useConversations() {
             c.id === conversationId ? { ...c, messageCount: c.messageCount + 1, updatedAt: new Date().toISOString() } : c
           )
         );
-        if (currentConversation?.id === conversationId) {
-          setCurrentConversation((prev) =>
-            prev ? { ...prev, messageCount: prev.messageCount + 1, updatedAt: new Date().toISOString() } : null
-          );
-        }
+        setCurrentConversation((prev) =>
+          prev?.id === conversationId
+            ? { ...prev, messageCount: prev.messageCount + 1, updatedAt: new Date().toISOString() }
+            : prev,
+        );
         return message;
       } catch (err) {
         setError(err instanceof Error ? err : new Error('Failed to add message'));
