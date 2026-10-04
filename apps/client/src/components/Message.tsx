@@ -19,6 +19,16 @@ export function Message({ message, isStreaming, modelId }: MessageProps) {
         {isStreaming && <span className="streaming-indicator">▋</span>}
       </div>
       <div className="message-content">
+        {message.tool_calls && message.tool_calls.length > 0 && (
+          <div className="tool-call-summary">
+            {message.tool_calls.map((call) => (
+              <div className="tool-call-chip" key={call.id}>
+                <span>Tool</span>
+                <strong>{call.function.name}</strong>
+              </div>
+            ))}
+          </div>
+        )}
         {Array.isArray(message.content)
           ? message.content.map((part, i) =>
               part.type === 'text' ? (
