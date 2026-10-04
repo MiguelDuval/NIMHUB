@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useConversations } from './hooks/useConversations';
 import { useModels } from './hooks/useModels';
 import { useChat } from './hooks/useChat';
@@ -83,6 +83,11 @@ export default function App() {
   const [showModelDetails, setShowModelDetails] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [agentMode, setAgentMode] = useState(false);
+  const currentConversationRef = useRef(currentConversation);
+
+  useEffect(() => {
+    currentConversationRef.current = currentConversation;
+  }, [currentConversation]);
 
   const selectedModel = useMemo(
     () => models.find((m) => m.id === selectedModelId),
@@ -105,7 +110,7 @@ export default function App() {
     messages: chatMessages,
     onChunk: (content, assistantMessageId) => {
       setStreamingContent(content);
-      if (currentConversation && assistantMessageId) {
+      if (assistantMessageId) {
         updateMessage(assistantMessageId, { content });
       }
     },
@@ -114,7 +119,7 @@ export default function App() {
       setRetryCount(0);
     },
     onError: (err, assistantMessageId) => {
-      if (currentConversation && assistantMessageId) {
+      if (assistantMessageId) {
         updateMessage(assistantMessageId, { content: 'Error: ' + err.message });
       }
       setStreamingContent('');
@@ -181,7 +186,11 @@ export default function App() {
     if (!text && attachments.length === 0) return;
     if (!selectedModelId) return;
     if (effectiveBusy) return;
-    if (!currentConversation) return;
+    const conversation = currentConversation ?? await createConversation(selectedModelId);
+    if (!currentConversation) {
+      currentConversationRef.current = conversation;
+      await selectConversation(conversation.id);
+    }
 
     let content: string | Array<
       { type: 'text'; text: string } |
@@ -198,7 +207,15 @@ export default function App() {
       ];
     }
 
-    await addMessage(currentConversation.id, 'user', content);
+    await addMessage(conversation.id, 'user', content);
+    const titleSource = text || (attachments.length > 0 ? 'Image request' : '');
+    if (conversation.title === 'New Conversation' && titleSource) {
+      const title = titleSource.replace(/\s+/g, ' ').trim().slice(0, 60);
+      if (title) {
+        await updateConversation(conversation.id, { title });
+      }
+    }
+
     const apiMessages = [...chatMessages, { role: 'user' as const, content }];
 
     if (agentMode) {
@@ -208,7 +225,7 @@ export default function App() {
       return;
     }
 
-    const assistantMsg = await addMessage(currentConversation.id, 'assistant', '');
+    const assistantMsg = await addMessage(conversation.id, 'assistant', '');
     const assistantMessageId = assistantMsg.id;
 
     setInputMessage('');
@@ -220,6 +237,9 @@ export default function App() {
     selectedModelId,
     effectiveBusy,
     currentConversation,
+    createConversation,
+    selectConversation,
+    updateConversation,
     chatMessages,
     addMessage,
     clearAttachments,
