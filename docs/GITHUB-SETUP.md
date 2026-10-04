@@ -27,3 +27,16 @@ Clicking the artifact/link downloads GitHub's artifact package. GitHub controls 
 
 ## Routine development
 You do not need to create a tag. You do not need to create a GitHub Release. A push is enough.
+## Physical Android + LAN gateway
+
+For a phone on the same LAN as the gateway computer, keep local binding secure by default and opt in to LAN exposure:
+
+```env
+NIM_HUB_HOST=0.0.0.0
+NIM_HUB_PORT=8787
+NIM_HUB_ALLOWED_ORIGINS=http://localhost:5173,http://localhost,https://localhost
+```
+
+Start the gateway on that LAN interface (or configure your launcher to use these settings), allow inbound TCP 8787 in the computer firewall when prompted, then enter the computer's LAN URL in the Android app, for example `http://192.168.1.10:8787`.
+
+Do not expose the gateway port to the public internet. Use HTTPS for a hardened non-local deployment.
