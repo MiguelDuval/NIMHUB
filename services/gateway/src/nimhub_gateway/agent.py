@@ -198,10 +198,19 @@ class AgentRuntime:
         if not calls:
             return [], []
 
+        completed_call_ids = {
+            str(message.get("tool_call_id"))
+            for message in messages
+            if message.get("role") == "tool" and message.get("tool_call_id")
+        }
+
         pending: list[AgentApprovalRequest] = []
         executable: list[tuple[dict[str, Any], MCPToolDefinition, dict[str, Any]]] = []
 
         for call in calls:
+            call_id = str(call.get("id") or "")
+            if call_id and call_id in completed_call_ids:
+                continue
             function = call.get("function") or {}
             model_name = str(function.get("name") or "")
             tool = by_model_name.get(model_name)
@@ -348,6 +357,12 @@ class AgentRuntime:
                     parsed_calls.append((call, tool, arguments))
 
             if pending:
+                # Preserve errors from sibling tool calls in the same model turn.
+                # On approval continuation those completed calls are skipped, so
+                # they are never executed or re-validated a second time.
+                for call, error in hard_errors:
+                    messages.append(self._tool_error_message(call, error))
+
                 # Do not partially execute a model turn containing a blocked write.
                 # The returned messages are the exact continuation state; the client
                 # can approve the listed hashes and resubmit it unchanged.
