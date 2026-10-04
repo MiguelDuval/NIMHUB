@@ -312,12 +312,12 @@ async def agent(
     request: AgentRunRequest,
     nvidia_api_key: str | None = Header(default=None, alias="X-NVIDIA-API-Key"),
 ):
-    if not settings.nvidia_api_key:
+    if not settings.nvidia_api_key and not nvidia_api_key:
         raise HTTPException(
             status_code=503,
             detail={
                 "code": "NVIDIA_NOT_CONFIGURED",
-                "message": "NVIDIA_API_KEY is not configured",
+                "message": "NVIDIA API key is not configured on the gateway or supplied by the client",
                 "retryable": False,
             },
         )
