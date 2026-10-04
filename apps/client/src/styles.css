@@ -479,3 +479,32 @@
     right: auto;
   }
 }
+
+
+.tool-result-content {
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid #1d232b;
+  border-radius: 8px;
+  background: #090c10;
+  color: #cbd5e1;
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.message.tool {
+  padding: 10px 12px;
+  background: #0b0f14;
+  border: 1px solid #1a222c;
+}
+
+.message.tool .message-header {
+  margin-bottom: 6px;
+}
+
+.message.tool .message-model {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
