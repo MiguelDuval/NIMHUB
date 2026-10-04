@@ -7,6 +7,7 @@ import { useMCPStatus } from './hooks/useMCPStatus';
 import { useGatewayStatus } from './hooks/useGatewayStatus';
 import { useAttachments } from './hooks/useAttachments';
 import { storage } from './services/storage';
+import { api } from './services/api';
 import type { ChatMessage, StoredMessage } from './types';
 import { Message } from './components/Message';
 import { ModelSelector } from './components/ModelSelector';
@@ -490,6 +491,7 @@ export default function App() {
               await refreshModels();
               await refreshMCP();
             }}
+            onTest={(nextUrl) => api.healthAt(nextUrl)}
             onRefresh={async () => {
               await refreshGateway();
               await refreshModels();
