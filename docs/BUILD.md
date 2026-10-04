@@ -20,4 +20,4 @@ NIM Hub does not use GitHub Releases for routine development builds. Every push 
 nim-smoke.yml is a separate optional/manual API connectivity test. It does not publish application artifacts.
 
 ## Versioning
-An Android versioning scheme can be added later inside the Android project. A tag is not required to obtain an APK build.
+An Android versioning scheme can be added later inside the Android project. A tag is not required to obtain an APK build.\n## Android gateway networking\n\nCapacitor Android uses a local localhost WebView origin. NIM Hub permits the personal FastAPI gateway to be reached over HTTP on a trusted LAN for development/personal use, while HTTPS remains the preferred hardened deployment mode. The APK enables cleartext/mixed-content networking specifically to support a user-configured LAN gateway URL.\n
