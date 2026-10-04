@@ -182,7 +182,10 @@ export default function App() {
     element.scrollTop = element.scrollHeight;
   }, [chatMessages.length, streamingContent, agentStreamingText, agentApprovals.length]);
 
-  const canUseAgent = selectedModel?.capabilities.includes('tool-calling') ?? false;
+  const canUseAgent =
+    gatewayStatus === 'connected' &&
+    nvidiaConfigured === true &&
+    (selectedModel?.capabilities.includes('tool-calling') ?? false);
   const {
     servers: mcpServers,
     tools: mcpTools,
@@ -357,6 +360,8 @@ export default function App() {
     () =>
       Boolean(inputMessage.trim() || attachments.length > 0) &&
       Boolean(selectedModelId) &&
+      gatewayStatus === 'connected' &&
+      nvidiaConfigured === true &&
       (attachments.length === 0 || (selectedModel?.capabilities.includes('vision') ?? false)) &&
       !effectiveBusy &&
       (agentMode
@@ -370,6 +375,8 @@ export default function App() {
       agentMode,
       agentStatus,
       selectedModel,
+      gatewayStatus,
+      nvidiaConfigured,
       canUseAgent,
       status,
     ],
