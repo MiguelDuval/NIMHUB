@@ -3,11 +3,12 @@ import { api, APIError } from '../services/api';
 import type {
   AgentApprovalRequest,
   AgentRunResponse,
+  AgentStreamEvent,
   ChatMessage,
   MCPApprovalGrant,
 } from '../types';
 
-export type AgentStatus = 'idle' | 'running' | 'approval_required' | 'success' | 'error';
+export type AgentStatus = 'idle' | 'running' | 'approval_required' | 'success' | 'error' | 'cancelled';
 
 interface UseAgentOptions {
   modelId: string;
@@ -19,8 +20,10 @@ interface UseAgentReturn {
   status: AgentStatus;
   error: APIError | null;
   approvals: AgentApprovalRequest[];
+  streamingText: string;
   run: (messages: ChatMessage[]) => Promise<void>;
   approve: () => Promise<void>;
+  abort: () => void;
   reject: () => void;
   reset: () => void;
 }
@@ -48,14 +51,25 @@ export function useAgent({
   const [status, setStatus] = useState<AgentStatus>('idle');
   const [error, setError] = useState<APIError | null>(null);
   const [approvals, setApprovals] = useState<AgentApprovalRequest[]>([]);
+  const [streamingText, setStreamingText] = useState('');
 
   const continuationRef = useRef<ChatMessage[]>([]);
   const previousLengthRef = useRef(0);
   const mountedRef = useRef(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const runIdRef = useRef(0);
 
-  useEffect(() => () => {
-    mountedRef.current = false;
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      abortControllerRef.current?.abort();
+    };
   }, []);
+
+  const isCurrentRun = useCallback((runId: number) => (
+    mountedRef.current && runIdRef.current === runId
+  ), []);
 
   const absorbResponse = useCallback(
     (response: AgentRunResponse) => {
@@ -66,6 +80,7 @@ export function useAgent({
 
       if (delta.length > 0) onMessages?.(delta);
 
+      setStreamingText('');
       setApprovals(response.approvals);
       if (response.status === 'completed') {
         setStatus('success');
@@ -83,27 +98,115 @@ export function useAgent({
     [onMessages, onComplete],
   );
 
-  const run = useCallback(
-    async (messages: ChatMessage[]) => {
-      if (status === 'running') return;
+  const consumeStream = useCallback(
+    async (
+      request: {
+        model: string;
+        messages: Array<Record<string, unknown>>;
+        stream: boolean;
+        approval_grants: MCPApprovalGrant[];
+      },
+      runId: number,
+    ) => {
+      for await (const event of api.agentStream(request, abortControllerRef.current?.signal)) {
+        if (!isCurrentRun(runId)) return;
+
+        switch (event.type) {
+          case 'content_delta':
+            if (event.text) {
+              setStreamingText((current) => current + event.text);
+            }
+            break;
+          case 'approval_required': {
+            const response: AgentRunResponse = {
+              status: 'approval_required',
+              messages: event.messages ?? continuationRef.current as unknown as Array<Record<string, unknown>>,
+              approvals: event.approvals ?? [],
+              turns: event.turns ?? 0,
+            };
+            absorbResponse(response);
+            return;
+          }
+          case 'done': {
+            const response: AgentRunResponse = {
+              status: 'completed',
+              response: event.response ?? null,
+              messages: event.messages ?? continuationRef.current as unknown as Array<Record<string, unknown>>,
+              approvals: [],
+              turns: event.turns ?? 0,
+            };
+            absorbResponse(response);
+            return;
+          }
+          case 'max_turns': {
+            const response: AgentRunResponse = {
+              status: 'max_turns',
+              response: null,
+              messages: event.messages ?? continuationRef.current as unknown as Array<Record<string, unknown>>,
+              approvals: [],
+              turns: event.turns ?? 0,
+            };
+            absorbResponse(response);
+            return;
+          }
+          case 'error':
+            throw new APIError(
+              event.message ?? 'Agent stream failed',
+              event.code ?? 'AGENT_FAILED',
+              0,
+              false,
+            );
+          case 'tool_result':
+          case 'tool_error':
+          case 'continue':
+            // Tool progress is represented by the persisted final gateway state.
+            // Keep the live assistant text stable while the gateway continues.
+            break;
+          default:
+            break;
+        }
+      }
+
+      if (isCurrentRun(runId) && status === 'running') {
+        throw new Error('Agent stream ended before a terminal event');
+      }
+    },
+    [absorbResponse, isCurrentRun, status],
+  );
+
+  const startRun = useCallback(
+    async (messages: ChatMessage[], approvalGrants: MCPApprovalGrant[]) => {
+      abortControllerRef.current?.abort();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      const runId = ++runIdRef.current;
 
       continuationRef.current = messages;
       previousLengthRef.current = messages.length;
       setApprovals([]);
+      setStreamingText('');
       setError(null);
       setStatus('running');
 
       try {
-        const response = await api.agent({
-          model: modelId,
-          messages: messages as unknown as Array<Record<string, unknown>>,
-          stream: false,
-          approval_grants: [],
-        });
-        if (!mountedRef.current) return;
-        absorbResponse(response);
+        await consumeStream(
+          {
+            model: modelId,
+            messages: messages as unknown as Array<Record<string, unknown>>,
+            stream: true,
+            approval_grants: approvalGrants,
+          },
+          runId,
+        );
       } catch (err) {
-        if (!mountedRef.current) return;
+        if (!isCurrentRun(runId)) return;
+        if (controller.signal.aborted) {
+          setStreamingText('');
+          setApprovals([]);
+          setStatus('cancelled');
+          return;
+        }
+
         const apiError = err instanceof APIError
           ? err
           : new APIError(
@@ -112,11 +215,24 @@ export function useAgent({
               0,
               false,
             );
+        setStreamingText('');
         setError(apiError);
         setStatus('error');
+      } finally {
+        if (isCurrentRun(runId)) {
+          abortControllerRef.current = null;
+        }
       }
     },
-    [absorbResponse, modelId, status],
+    [consumeStream, isCurrentRun, modelId],
+  );
+
+  const run = useCallback(
+    async (messages: ChatMessage[]) => {
+      if (status === 'running') return;
+      await startRun(messages, []);
+    },
+    [startRun, status],
   );
 
   const approve = useCallback(async () => {
@@ -126,41 +242,33 @@ export function useAgent({
       approval_token: approval.approval_token,
       arguments_sha256: approval.arguments_sha256,
     }));
-    setError(null);
-    setStatus('running');
+    await startRun(continuationRef.current, grants);
+  }, [approvals, startRun, status]);
 
-    try {
-      const response = await api.agent({
-        model: modelId,
-        messages: continuationRef.current as unknown as Array<Record<string, unknown>>,
-        stream: false,
-        approval_grants: grants,
-      });
-      if (!mountedRef.current) return;
-      absorbResponse(response);
-    } catch (err) {
-      if (!mountedRef.current) return;
-      const apiError = err instanceof APIError
-        ? err
-        : new APIError(
-            err instanceof Error ? err.message : 'Agent approval continuation failed',
-            'AGENT_FAILED',
-            0,
-            false,
-          );
-      setError(apiError);
-      setStatus('error');
-    }
-  }, [absorbResponse, approvals, modelId, status]);
+  const abort = useCallback(() => {
+    runIdRef.current += 1;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setStreamingText('');
+    setApprovals([]);
+    setError(null);
+    setStatus('cancelled');
+  }, []);
 
   const reject = useCallback(() => {
+    runIdRef.current += 1;
+    setStreamingText('');
     setApprovals([]);
     setStatus('idle');
   }, []);
 
   const reset = useCallback(() => {
+    runIdRef.current += 1;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
     continuationRef.current = [];
     previousLengthRef.current = 0;
+    setStreamingText('');
     setApprovals([]);
     setError(null);
     setStatus('idle');
@@ -170,8 +278,10 @@ export function useAgent({
     status,
     error,
     approvals,
+    streamingText,
     run,
     approve,
+    abort,
     reject,
     reset,
   };
