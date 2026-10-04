@@ -8,6 +8,15 @@ import type { ImageAttachment, ChatMessageContent } from '../types';
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 export function useAttachments() {
   const [attachments, setAttachments] = useState<ImageAttachment[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -53,16 +62,19 @@ export function useAttachments() {
   }, []);
 
   const clearAttachments = useCallback(() => {
-    attachments.forEach((a) => URL.revokeObjectURL(a.previewUrl));
-    setAttachments([]);
-  }, [attachments]);
+    setAttachments((prev) => {
+      prev.forEach((a) => URL.revokeObjectURL(a.previewUrl));
+      return [];
+    });
+  }, []);
 
-  const getAttachmentContent = useCallback((attachment: ImageAttachment): ChatMessageContent => {
+  const getAttachmentContent = useCallback(async (attachment: ImageAttachment): Promise<ChatMessageContent> => {
     // Convert file to base64 data URL for API
+    const base64 = await fileToBase64(attachment.file);
     return {
       type: 'image_url',
       image_url: {
-        url: attachment.previewUrl,
+        url: base64,
         detail: 'auto',
       },
     };

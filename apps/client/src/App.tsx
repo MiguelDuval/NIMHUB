@@ -56,6 +56,7 @@ export default function App() {
     addImage,
     removeImage,
     clearAttachments,
+    getAttachmentContent,
     clearError: clearAttachError,
   } = useAttachments();
 
@@ -94,9 +95,10 @@ export default function App() {
     if (status === 'streaming' || status === 'pending') return;
     if (!currentConversation) return;
 
-    let content: string | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail: 'auto' } }> = text;
+    let content: string | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail?: 'auto' | 'high' | 'low' } }> = text;
     if (attachments.length > 0) {
-      content = [...(text ? [{ type: 'text' as const, text }] : []), ...attachments.map(att => ({ type: 'image_url' as const, image_url: { url: att.previewUrl, detail: 'auto' as const } }))];
+      const attachmentContents = await Promise.all(attachments.map(att => getAttachmentContent(att)));
+      content = [...(text ? [{ type: 'text' as const, text }] : []), ...attachmentContents];
     }
 
     await addMessage(currentConversation.id, 'user', content);
@@ -105,7 +107,7 @@ export default function App() {
     setInputMessage('');
     clearAttachments();
     await send(apiMessages, { stream: true });
-  }, [inputMessage, attachments, selectedModelId, status, currentConversation, chatMessages, addMessage, clearAttachments, send]);
+  }, [inputMessage, attachments, selectedModelId, status, currentConversation, chatMessages, addMessage, clearAttachments, send, getAttachmentContent]);
 
   const handleNewConversation = useCallback(async () => {
     if (!selectedModelId) return;
