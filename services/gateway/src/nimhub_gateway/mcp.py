@@ -215,12 +215,19 @@ def normalize_mcp_tool(server: MCPServerConfig, tool: Any) -> MCPToolDefinition:
     idempotent = _annotation_value(annotations, "idempotent_hint")
     open_world = _annotation_value(annotations, "open_world_hint")
 
-    # Safe default: unknown behavior is never automatic.
-    requires_approval = (
-        server.permission != "read"
-        or read_only is not True
-        or destructive is True
-    )
+    # Server permission is a hard upper bound. Tool annotations decide the
+    # minimum permission needed by this specific operation:
+    # read-only -> read, non-read-only/unknown -> write, destructive -> destructive.
+    required_permission: MCPPermission
+    if destructive is True:
+        required_permission = "destructive"
+    elif read_only is True:
+        required_permission = "read"
+    else:
+        required_permission = "write"
+
+    permission_rank = {"read": 0, "write": 1, "destructive": 2}
+    requires_approval = required_permission != "read"
 
     return MCPToolDefinition(
         server_id=server.id,
@@ -442,11 +449,16 @@ class MCPRegistry:
         arguments_sha256: str,
         grants: list[MCPApprovalGrant],
     ) -> None:
-        # A read-only server policy is a hard upper bound, not a UI hint.
+        permission_rank = {"read": 0, "write": 1, "destructive": 2}
         if tool.permission == "read" and tool.read_only is not True:
             raise MCPPolicyError(
                 f"Tool {tool.qualified_name} is not explicitly read-only; "
                 "read-only MCP server policy blocks execution"
+            )
+
+        if tool.permission == "write" and tool.destructive is True:
+            raise MCPPolicyError(
+                f"Tool {tool.qualified_name} requires destructive MCP permission"
             )
 
         if tool.requires_approval and not MCPRegistry._is_approved(
