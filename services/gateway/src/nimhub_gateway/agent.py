@@ -34,6 +34,7 @@ class AgentApprovalRequest(BaseModel):
     """A client-safe description of a blocked model-requested tool call."""
 
     tool: str
+    tool_call_id: str
     model_name: str
     description: str | None
     arguments: dict[str, Any]
@@ -154,12 +155,14 @@ class AgentRuntime:
     @staticmethod
     def _approval_request(
         tool: MCPToolDefinition,
+        tool_call_id: str,
         arguments: dict[str, Any],
         arguments_sha256: str,
         approval_token: str,
     ) -> AgentApprovalRequest:
         return AgentApprovalRequest(
             tool=tool.qualified_name,
+            tool_call_id=tool_call_id,
             model_name=tool.model_name,
             description=tool.description,
             arguments=arguments,
@@ -236,6 +239,7 @@ class AgentRuntime:
                     pending.append(
                         self._approval_request(
                             tool,
+                            str(call.get("id") or "unknown"),
                             arguments,
                             arguments_sha256,
                             exc.approval_token,
@@ -393,7 +397,7 @@ class AgentRuntime:
 
                 try:
                     arguments = self._parse_arguments(call)
-                    arguments_sha256 = await self.mcp.authorize_tool_call(
+                    await self.mcp.authorize_tool_call(
                         tool,
                         arguments,
                         request.approval_grants,
@@ -403,6 +407,7 @@ class AgentRuntime:
                     pending.append(
                         self._approval_request(
                             tool,
+                            str(call.get("id") or "unknown"),
                             arguments,
                             exc.arguments_sha256,
                             exc.approval_token,
