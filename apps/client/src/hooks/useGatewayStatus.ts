@@ -13,8 +13,14 @@ export interface GatewayStatus {
   status: GatewayConnectionStatus;
   error: APIError | Error | null;
   nvidiaConfigured: boolean | null;
+  nvidiaBaseUrl: string;
+  adminConfigured: boolean | null;
   refresh: () => Promise<void>;
   updateUrl: (value: string) => Promise<void>;
+  saveNvidiaSettings: (
+    settings: { apiKey: string; baseUrl: string },
+    adminToken: string,
+  ) => ReturnType<typeof api.saveNvidiaSettings>;
 }
 
 export function useGatewayStatus(): GatewayStatus {
@@ -22,6 +28,10 @@ export function useGatewayStatus(): GatewayStatus {
   const [status, setStatus] = useState<GatewayConnectionStatus>('checking');
   const [error, setError] = useState<APIError | Error | null>(null);
   const [nvidiaConfigured, setNvidiaConfigured] = useState<boolean | null>(null);
+  const [nvidiaBaseUrl, setNvidiaBaseUrl] = useState(
+    'https://integrate.api.nvidia.com/v1',
+  );
+  const [adminConfigured, setAdminConfigured] = useState<boolean | null>(null);
   const requestIdRef = useRef(0);
 
   const refresh = useCallback(async () => {
@@ -33,6 +43,12 @@ export function useGatewayStatus(): GatewayStatus {
       const health = await api.health();
       if (requestId !== requestIdRef.current) return;
       setNvidiaConfigured(health.nvidia_configured);
+      setNvidiaBaseUrl(
+        health.nvidia_base_url || 'https://integrate.api.nvidia.com/v1',
+      );
+      setAdminConfigured(
+        health.admin_configured === undefined ? null : health.admin_configured,
+      );
       setStatus(health.ok ? 'connected' : 'error');
       if (!health.ok) {
         setError(new Error('Gateway reported an unhealthy state'));
@@ -40,6 +56,8 @@ export function useGatewayStatus(): GatewayStatus {
     } catch (err) {
       if (requestId !== requestIdRef.current) return;
       setNvidiaConfigured(null);
+      setNvidiaBaseUrl('https://integrate.api.nvidia.com/v1');
+      setAdminConfigured(null);
       setStatus('error');
       setError(
         err instanceof APIError || err instanceof Error
@@ -71,12 +89,37 @@ export function useGatewayStatus(): GatewayStatus {
     };
   }, [refresh]);
 
+  const saveNvidiaSettings = useCallback(
+    async (
+      settingsInput: { apiKey: string; baseUrl: string },
+      adminToken: string,
+    ) => {
+      const result = await api.saveNvidiaSettings(settingsInput, adminToken);
+      await refresh();
+      return result;
+    },
+    [refresh],
+  );
+
   return useMemo(() => ({
     url,
     status,
     error,
     nvidiaConfigured,
+    nvidiaBaseUrl,
+    adminConfigured,
     refresh,
     updateUrl,
-  }), [url, status, error, nvidiaConfigured, refresh, updateUrl]);
+    saveNvidiaSettings,
+  }), [
+    url,
+    status,
+    error,
+    nvidiaConfigured,
+    nvidiaBaseUrl,
+    adminConfigured,
+    refresh,
+    updateUrl,
+    saveNvidiaSettings,
+  ]);
 }
