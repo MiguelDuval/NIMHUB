@@ -6,6 +6,12 @@ import type { ModelCapabilityInfo } from './index';
 
 export type RequestStatus = 'idle' | 'pending' | 'streaming' | 'success' | 'error' | 'cancelled';
 
+// Gateway returns normalized models directly
+export interface NIMModelListResponse {
+  object: 'list';
+  data: ModelCapabilityInfo[];
+}
+
 export interface APIError {
   code: string;
   message: string;

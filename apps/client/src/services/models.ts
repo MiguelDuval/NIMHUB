@@ -1,116 +1,112 @@
 /**
- * Model capability inference utilities
+ * Model capability utilities - now works with pre-normalized gateway responses
  */
 
-import type { ModelCapabilityInfo, NIMModel, ModelCapability, ModelModality } from '../types';
+import type { ModelCapabilityInfo, ModelCapability, ModelModality, CapabilitySource, EndpointFamily } from '../types';
 
-export function transformModels(models: NIMModel[]): ModelCapabilityInfo[] {
-  const now = new Date().toISOString();
+/**
+ * Transform gateway's normalized model list to client ModelCapabilityInfo
+ * Gateway now returns pre-normalized models with capability info
+ */
+export function transformModels(models: ModelCapabilityInfo[]): ModelCapabilityInfo[] {
+  // Gateway already provides normalized models, just ensure required fields
+  return models.map((model) => ({
+    ...model,
+    // Ensure required fields have defaults
+    capabilities: model.capabilities ?? ['chat'],
+    inputModalities: model.inputModalities ?? ['text'],
+    outputModalities: model.outputModalities ?? ['text'],
+    endpointFamily: model.endpointFamily ?? 'chat',
+    capabilitySource: model.capabilitySource ?? 'heuristic',
+    discoveredAt: model.discoveredAt ?? new Date().toISOString(),
+  }));
+}
 
-  return models.map((model) => {
-    const id = model.id.toLowerCase();
-    const capabilities = inferCapabilities(id);
-    const endpointFamily = inferEndpointFamily(id, capabilities);
-    const { inputModalities, outputModalities } = inferModalities(capabilities);
+/**
+ * Filter models by capability
+ */
+export function filterModelsByCapability(
+  models: ModelCapabilityInfo[],
+  capability: ModelCapability
+): ModelCapabilityInfo[] {
+  return models.filter((m) => m.capabilities.includes(capability));
+}
 
-    return {
-      id: model.id,
-      name: model.id,
-      provider: 'nvidia',
-      endpointFamily,
-      inputModalities,
-      outputModalities,
-      capabilities,
-      discoveredAt: now,
-      contextWindow: inferContextWindow(id),
-    };
+/**
+ * Get models suitable for text chat
+ */
+export function getChatModels(models: ModelCapabilityInfo[]): ModelCapabilityInfo[] {
+  return models.filter((m) => m.capabilities.includes('chat') && m.endpointFamily === 'chat');
+}
+
+/**
+ * Get models that support vision
+ */
+export function getVisionModels(models: ModelCapabilityInfo[]): ModelCapabilityInfo[] {
+  return models.filter((m) => m.capabilities.includes('vision'));
+}
+
+/**
+ * Get models that support tool calling
+ */
+export function getToolCallingModels(models: ModelCapabilityInfo[]): ModelCapabilityInfo[] {
+  return models.filter((m) => m.capabilities.includes('tool-calling'));
+}
+
+/**
+ * Get models that support reasoning
+ */
+export function getReasoningModels(models: ModelCapabilityInfo[]): ModelCapabilityInfo[] {
+  return models.filter((m) => m.capabilities.includes('reasoning'));
+}
+
+/**
+ * Check if a model supports a specific capability
+ */
+export function modelSupports(model: ModelCapabilityInfo, capability: ModelCapability): boolean {
+  return model.capabilities.includes(capability);
+}
+
+/**
+ * Get model's capability source (registry/heuristic/provider)
+ */
+export function getCapabilitySource(model: ModelCapabilityInfo): CapabilitySource {
+  return model.capabilitySource ?? 'heuristic';
+}
+
+/**
+ * Check if model capabilities are from verified registry
+ */
+export function isVerifiedModel(model: ModelCapabilityInfo): boolean {
+  return model.capabilitySource === 'registry';
+}
+
+/**
+ * Get model display name with capability badges
+ */
+export function getModelDisplayName(model: ModelCapabilityInfo): string {
+  return model.name ?? model.id;
+}
+
+/**
+ * Get context window in human-readable format
+ */
+export function getContextWindowDisplay(model: ModelCapabilityInfo): string {
+  if (!model.contextWindow) return 'Unknown';
+  const k = model.contextWindow / 1000;
+  return k >= 100 ? `${(k / 1000).toFixed(0)}M` : `${k.toFixed(0)}k`;
+}
+
+/**
+ * Sort models: registry first, then by name
+ */
+export function sortModels(models: ModelCapabilityInfo[]): ModelCapabilityInfo[] {
+  return [...models].sort((a, b) => {
+    // Registry models first
+    const aRegistry = isVerifiedModel(a) ? 0 : 1;
+    const bRegistry = isVerifiedModel(b) ? 0 : 1;
+    if (aRegistry !== bRegistry) return aRegistry - bRegistry;
+    // Then by name
+    return (a.name ?? a.id).localeCompare(b.name ?? b.id);
   });
-}
-
-function inferCapabilities(modelId: string): ModelCapability[] {
-  const caps: ModelCapability[] = ['chat'];
-  const id = modelId.toLowerCase();
-
-  // Reasoning models
-  if (id.includes('reasoning') || id.includes('r1') || id.includes('nemotron')) {
-    caps.push('reasoning');
-  }
-
-  // Vision models
-  if (
-    id.includes('vision') ||
-    id.includes('vlm') ||
-    id.includes('llava') ||
-    id.includes('qwen-vl') ||
-    id.includes('pixtral')
-  ) {
-    caps.push('vision');
-  }
-
-  // Tool calling - most modern models support this
-  if (!id.includes('instruct') || id.includes('nemotron') || id.includes('llama-3')) {
-    caps.push('tool-calling');
-  }
-
-  // Image generation
-  if (id.includes('flux') || id.includes('stable-diffusion') || id.includes('sdxl') || id.includes('qwen-image')) {
-    caps.push('image-generation');
-  }
-
-  // Video generation
-  if (id.includes('video') || id.includes('svd') || id.includes('stable-video')) {
-    caps.push('video-generation');
-  }
-
-  // ASR/TTS
-  if (id.includes('asr') || id.includes('whisper') || id.includes('speech-to-text')) {
-    caps.push('asr');
-  }
-  if (id.includes('tts') || id.includes('text-to-speech') || id.includes('parakeet')) {
-    caps.push('tts');
-  }
-
-  return caps;
-}
-
-function inferEndpointFamily(modelId: string, capabilities: ModelCapability[]): ModelCapabilityInfo['endpointFamily'] {
-  const id = modelId.toLowerCase();
-
-  if (capabilities.includes('image-generation')) return 'image';
-  if (capabilities.includes('video-generation')) return 'video';
-  if (capabilities.includes('asr') || capabilities.includes('tts')) return 'speech';
-  return 'chat';
-}
-
-function inferModalities(capabilities: ModelCapability[]): { inputModalities: ModelModality[]; outputModalities: ModelModality[] } {
-  const input: ModelModality[] = ['text'];
-  const output: ModelModality[] = ['text'];
-
-  if (capabilities.includes('vision')) {
-    input.push('image');
-  }
-  if (capabilities.includes('image-generation')) {
-    output.push('image');
-  }
-  if (capabilities.includes('video-generation')) {
-    output.push('video');
-  }
-  if (capabilities.includes('asr')) {
-    input.push('audio');
-  }
-  if (capabilities.includes('tts')) {
-    output.push('audio');
-  }
-
-  return { inputModalities: input, outputModalities: output };
-}
-
-function inferContextWindow(modelId: string): number | undefined {
-  const id = modelId.toLowerCase();
-  if (id.includes('32k') || id.includes('128k')) return 128000;
-  if (id.includes('8k')) return 8192;
-  if (id.includes('4k')) return 4096;
-  // Default for modern models
-  if (id.includes('llama-3') || id.includes('nemotron') || id.includes('mistral')) return 8192;
-  return undefined;
 }

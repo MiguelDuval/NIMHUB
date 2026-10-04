@@ -25,32 +25,28 @@ export type ModelCapability =
   | 'asr'
   | 'tts';
 
+export type CapabilitySource = 'registry' | 'heuristic' | 'provider';
+
+export type EndpointFamily = 'chat' | 'image' | 'video' | 'speech' | 'embedding';
+
 export interface ModelCapabilityInfo {
   id: string;
   name?: string;
   provider: string;
-  endpointFamily: 'chat' | 'image' | 'video' | 'speech' | 'embedding';
+  endpointFamily: EndpointFamily;
   inputModalities: ModelModality[];
   outputModalities: ModelModality[];
   capabilities: ModelCapability[];
   discoveredAt: string;
   maxTokens?: number;
   contextWindow?: number;
+  maxOutputTokens?: number;
+  capabilitySource: CapabilitySource;
 }
 
 export interface NIMModelListResponse {
   object: 'list';
-  data: NIMModel[];
-}
-
-export interface NIMModel {
-  id: string;
-  object: 'model';
-  created: number;
-  owned_by: string;
-  root?: string;
-  parent?: string;
-  permission?: unknown[];
+  data: ModelCapabilityInfo[];
 }
 
 // Re-export all other types
