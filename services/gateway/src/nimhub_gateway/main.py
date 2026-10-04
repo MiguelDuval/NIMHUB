@@ -217,12 +217,12 @@ async def chat(
 ):
     payload = request.model_dump(exclude_none=True)
     # Validate API key early to return proper HTTP error before streaming starts.
-    if not settings.nvidia_api_key:
+    if not settings.nvidia_api_key and not nvidia_api_key:
         raise HTTPException(
             status_code=503,
             detail={
                 "code": "NVIDIA_NOT_CONFIGURED",
-                "message": "NVIDIA_API_KEY is not configured",
+                "message": "NVIDIA API key is not configured",
                 "retryable": False,
             },
         )
