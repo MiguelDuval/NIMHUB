@@ -56,15 +56,9 @@ class FakeNIM:
 
     async def chat_stream(self, payload: dict) -> AsyncIterator[bytes]:
         self.payloads.append(payload)
-        yield b'data: {"id":"chat-1","object":"chat.completion.chunk","created":1,"model":"test-model","choices":[{"index":0,"delta":{"role":"assistant","content":"hel"},"finish_reason":null}]}
-
-'
-        yield b'data: {"id":"chat-1","object":"chat.completion.chunk","created":1,"model":"test-model","choices":[{"index":0,"delta":{"content":"lo"},"finish_reason":"stop"}]}
-
-'
-        yield b'data: [DONE]
-
-'
+        yield b'data: {"id":"chat-1","object":"chat.completion.chunk","created":1,"model":"test-model","choices":[{"index":0,"delta":{"role":"assistant","content":"hel"},"finish_reason":null}]}\\n\\n'
+        yield b'data: {"id":"chat-1","object":"chat.completion.chunk","created":1,"model":"test-model","choices":[{"index":0,"delta":{"content":"lo"},"finish_reason":"stop"}]}\\n\\n'
+        yield b'data: [DONE]\\n\\n'
 
 
 @pytest.mark.asyncio
