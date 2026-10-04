@@ -129,7 +129,7 @@ export interface MCPToolCallRequest {
 }
 
 export interface MCPApprovalGrant {
-  tool: string;
+  approval_token: string;
   arguments_sha256: string;
 }
 
@@ -149,6 +149,7 @@ export interface AgentApprovalRequest {
   description?: string | null;
   arguments: Record<string, unknown>;
   arguments_sha256: string;
+  approval_token: string;
   destructive?: boolean | null;
   permission: MCPPermission;
 }
