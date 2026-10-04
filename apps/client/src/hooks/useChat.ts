@@ -107,7 +107,7 @@ export function useChat({
         if (stream) {
           let accumulatedContent = '';
 
-          for await (const chunk of api.chatStream(request)) {
+          for await (const chunk of api.chatStream(request, signal)) {
             // Check for abort
             if (signal.aborted) {
               setStatus('cancelled');
