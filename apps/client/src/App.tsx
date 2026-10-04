@@ -71,6 +71,7 @@ export default function App() {
   const {
     url: gatewayUrl,
     status: gatewayStatus,
+    adminConfigured: gatewayAdminConfigured,
     updateUrl: updateGatewayUrl,
   } = useGatewayStatus();
 
