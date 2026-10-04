@@ -6,7 +6,6 @@ import { useAgent } from './hooks/useAgent';
 import { useMCPStatus } from './hooks/useMCPStatus';
 import { useGatewayStatus } from './hooks/useGatewayStatus';
 import { useAttachments } from './hooks/useAttachments';
-import { useGlobalEvents } from './hooks/useGlobalEvents';
 import { storage } from './services/storage';
 import type { ChatMessage, StoredMessage } from './types';
 import { Message } from './components/Message';
@@ -59,14 +58,13 @@ export default function App() {
 
   const {
     attachments,
+    addImage,
     error: attachmentError,
     removeImage,
     clearAttachments,
     getAttachmentContent,
     clearError: clearAttachError,
   } = useAttachments();
-
-  useGlobalEvents();
 
   const {
     url: gatewayUrl,
@@ -607,7 +605,7 @@ export default function App() {
               inputMessage={inputMessage}
               onInputChange={setInputMessage}
               onSend={handleSend}
-              onAttach={() => {}}
+              onAddImage={addImage}
               onAbort={handleAbort}
               attachments={attachments}
               onRemoveAttachment={removeImage}
