@@ -12,7 +12,6 @@ from .mcp import (
     MCPPolicyError,
     MCPRegistry,
     MCPToolCallRequest,
-    MCPToolSummary,
     to_client_summary,
 )
 from .nvidia import NIMClient
