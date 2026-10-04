@@ -93,3 +93,96 @@ export interface HealthResponse {
   service: string;
   nvidia_configured: boolean;
 }
+
+// ============================================================================
+// MCP / Agent Types
+// ============================================================================
+
+export type MCPPermission = 'read' | 'write' | 'destructive';
+
+export interface MCPServerSummary {
+  id: string;
+  transport: 'streamable_http' | 'stdio';
+  enabled: boolean;
+  permission: MCPPermission;
+  configured: boolean;
+}
+
+export interface MCPToolSummary {
+  server_id: string;
+  name: string;
+  qualified_name: string;
+  model_name: string;
+  description?: string | null;
+  read_only?: boolean | null;
+  destructive?: boolean | null;
+  idempotent?: boolean | null;
+  open_world?: boolean | null;
+  permission: MCPPermission;
+  requires_approval: boolean;
+}
+
+export interface MCPToolCallRequest {
+  tool: string;
+  arguments: Record<string, unknown>;
+  approval_grants?: MCPApprovalGrant[];
+}
+
+export interface MCPApprovalGrant {
+  tool: string;
+  arguments_sha256: string;
+}
+
+export interface MCPToolResult {
+  tool: string;
+  is_error: boolean;
+  content: Array<Record<string, unknown>>;
+  structured_content?: unknown;
+  arguments_sha256: string;
+}
+
+export type AgentStatus = 'completed' | 'approval_required' | 'max_turns' | 'error';
+
+export interface AgentApprovalRequest {
+  tool: string;
+  model_name: string;
+  description?: string | null;
+  arguments: Record<string, unknown>;
+  arguments_sha256: string;
+  destructive?: boolean | null;
+  permission: MCPPermission;
+}
+
+export interface AgentRunRequest {
+  model: string;
+  messages: Array<Record<string, unknown>>;
+  stream?: boolean;
+  temperature?: number | null;
+  tool_choice?: string | Record<string, unknown> | null;
+  max_turns?: number;
+  approval_grants?: MCPApprovalGrant[];
+}
+
+export interface AgentRunResponse {
+  status: AgentStatus;
+  response?: Record<string, unknown> | null;
+  messages: Array<Record<string, unknown>>;
+  approvals: AgentApprovalRequest[];
+  turns: number;
+}
+
+export interface AgentStreamEvent {
+  type: 'content_delta' | 'tool_result' | 'tool_error' | 'approval_required' | 'continue' | 'done' | 'max_turns' | 'error';
+  text?: string;
+  tool?: string;
+  is_error?: boolean;
+  turn?: number;
+  tool_call_id?: string;
+  message?: string;
+  code?: string;
+  approvals?: AgentApprovalRequest[];
+  response?: Record<string, unknown>;
+  messages?: Array<Record<string, unknown>>;
+  turns?: number;
+}
+
