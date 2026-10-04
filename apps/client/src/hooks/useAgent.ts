@@ -179,7 +179,7 @@ export function useAgent({
             setActivities((current) => [
               ...current,
               {
-                id: `result-${event.toolCallId ?? event.tool ?? current.length}`,
+                id: `result-${event.tool_call_id ?? event.tool ?? current.length}`,
                 type: 'tool_result',
                 tool: event.tool,
                 toolCallId: event.tool_call_id,
@@ -194,6 +194,7 @@ export function useAgent({
               {
                 id: `error-${event.tool_call_id ?? current.length}`,
                 type: 'tool_error',
+                tool: event.tool,
                 toolCallId: event.tool_call_id,
                 message: event.message,
               },
