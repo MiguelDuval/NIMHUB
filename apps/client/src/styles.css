@@ -711,3 +711,80 @@
     grid-column: 1 / -1;
   }
 }
+
+
+/* Deep gateway / provider settings */
+.gateway-settings-popover {
+  width: min(520px, calc(100vw - 24px));
+  max-height: min(82vh, 760px);
+  overflow: auto;
+}
+
+.gateway-settings-section {
+  display: grid;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid #1d232b;
+}
+
+.gateway-settings-section-title {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  opacity: .5;
+}
+
+.gateway-settings-state {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  font-size: 11px;
+  opacity: .75;
+}
+
+.gateway-settings-warning {
+  padding: 9px 10px;
+  border: 1px solid rgba(245,158,11,.28);
+  border-radius: 8px;
+  background: rgba(245,158,11,.07);
+  color: #fde68a;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.gateway-settings-warning code {
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.gateway-settings-link {
+  color: #93c5fd;
+  font-weight: 700;
+}
+
+.gateway-connect-button {
+  width: 100%;
+  min-height: 42px;
+}
+
+.gateway-settings-reset {
+  margin-top: 8px;
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.gateway-settings-reset:disabled {
+  opacity: .4;
+}
+
+@media (max-width: 760px) {
+  .gateway-settings-popover {
+    width: min(calc(100vw - 24px), 520px);
+    max-height: calc(100vh - 96px);
+  }
+}
