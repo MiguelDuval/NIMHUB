@@ -164,6 +164,12 @@ function normalizeDirectModels(data: any): ModelCapabilityInfo[] {
     if (/wan2|wan-ai|video/.test(value)) return { endpointFamily: 'video', capabilities: ['video-generation'] };
     if (/parakeet|fastconformer|transcri|asr|speech-to-text/.test(value)) return { endpointFamily: 'speech', capabilities: ['asr'] };
     if (/magpie|tts|text-to-speech|speech-synthesis/.test(value)) return { endpointFamily: 'speech', capabilities: ['tts'] };
+    // NVIDIA currently advertises Nemotron 3 Ultra as agentic/tool-use capable.
+    // /models metadata is inconsistent across hosted endpoints, so retain a
+    // narrow, explicit family heuristic rather than enabling tools for unknown IDs.
+    if (/nemotron[-_/](?:3[-_.]ultra|3\.5)|qwen3[-_/]coder|kimi[-_/]k2/.test(value)) {
+      return { endpointFamily: 'chat', capabilities: ['chat', 'reasoning', 'tool-calling'] };
+    }
     return null;
   }
   return models.map((model: Record<string, unknown>) => {
