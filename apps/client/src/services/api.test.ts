@@ -94,4 +94,58 @@ describe('MCP gateway API', () => {
       { type: 'done', turns: 1, response: { choices: [] } },
     ]);
   });
+
+  it('parses a final SSE frame without a trailing newline', async () => {
+    const body = 'data: {"type":"done","turns":2,"response":{"choices":[]}}';
+
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const events = [];
+    for await (const event of api.agentStream({
+      model: 'test-model',
+      messages: [{ role: 'user', content: 'hello' }],
+    })) {
+      events.push(event);
+    }
+
+    expect(events).toEqual([
+      { type: 'done', turns: 2, response: { choices: [] } },
+    ]);
+  });
+
+  it('passes the AbortSignal to the agent stream request', async () => {
+    const body = 'data: {"type":"done","turns":1,"response":{"choices":[]}}\n\n';
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const controller = new AbortController();
+    for await (const _event of api.agentStream(
+      {
+        model: 'test-model',
+        messages: [{ role: 'user', content: 'hello' }],
+      },
+      controller.signal,
+    )) {
+      break;
+    }
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:8787/api/agent',
+      expect.objectContaining({
+        method: 'POST',
+        signal: controller.signal,
+      }),
+    );
+  });
 });
