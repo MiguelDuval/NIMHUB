@@ -40,10 +40,10 @@ export class APIError extends Error {
     super(message);
     this.name = 'APIError';
     this.code = code;
-    this.status = status;
     this.retryable = retryable;
     this.provider = provider;
     this.requestId = requestId;
+    this.status = status;
   }
 
   static fromResponse(response: Response, data: unknown): APIError {
@@ -130,7 +130,7 @@ export const api = {
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
+        const lines = buffer.split('\\n');
         buffer = lines.pop() ?? '';
 
         for (const line of lines) {
@@ -195,14 +195,18 @@ export const api = {
 
   /**
    * Stream gateway agent events over SSE.
+   * An optional AbortSignal lets the client cancel the network request without
+   * affecting the gateway's approval semantics or persisting any credentials.
    */
   async *agentStream(
     request: AgentRunRequest,
+    signal?: AbortSignal,
   ): AsyncGenerator<AgentStreamEvent, void, unknown> {
     const response = await fetch(`${GATEWAY_URL}/api/agent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...request, stream: true }),
+      signal,
     });
 
     if (!response.ok) {
@@ -223,7 +227,7 @@ export const api = {
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
+        const lines = buffer.split('\\n');
         buffer = lines.pop() ?? '';
 
         for (const line of lines) {
@@ -234,6 +238,21 @@ export const api = {
             yield JSON.parse(data) as AgentStreamEvent;
           } catch {
             // Ignore malformed SSE payloads; the next event can still recover.
+          }
+        }
+      }
+
+      // Handle a final SSE event even when the server closes without an extra
+      // newline after the frame. This keeps the parser correct for proxies and
+      // alternate SSE implementations, not just the current gateway.
+      const finalLine = buffer.trim();
+      if (finalLine.startsWith('data: ')) {
+        const data = finalLine.slice(6).trim();
+        if (data && data !== '[DONE]') {
+          try {
+            yield JSON.parse(data) as AgentStreamEvent;
+          } catch {
+            // Ignore a malformed terminal payload.
           }
         }
       }
