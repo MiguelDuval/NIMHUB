@@ -189,7 +189,7 @@ async def agent(request: AgentRunRequest):
         async def event_stream():
             try:
                 async for event in agent_runtime.stream(request):
-                    yield f"data: {json.dumps(event, ensure_ascii=False)}\\n\\n"
+                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
             except MCPConfigError as exc:
                 yield (
                     "data: "
@@ -201,7 +201,7 @@ async def agent(request: AgentRunRequest):
                         },
                         ensure_ascii=False,
                     )
-                    + "\\n\\n"
+                    + "\n\n"
                 )
             except Exception as exc:
                 yield (
@@ -214,7 +214,7 @@ async def agent(request: AgentRunRequest):
                         },
                         ensure_ascii=False,
                     )
-                    + "\\n\\n"
+                    + "\n\n"
                 )
 
         return StreamingResponse(
