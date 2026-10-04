@@ -51,6 +51,9 @@ jobs:
       - name: Install JavaScript dependencies
         run: npm install
 
+      - name: Run client tests
+        run: npm test -- --run
+
       - name: Build web layer
         run: npm run build
 
