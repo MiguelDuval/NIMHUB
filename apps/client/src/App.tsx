@@ -379,9 +379,7 @@ export default function App() {
       selectedModelId,
       effectiveBusy,
       agentMode,
-      agentStatus,
       selectedModel,
-      gatewayStatus,
       nvidiaConfigured,
       canUseAgent,
       status,
@@ -395,8 +393,12 @@ export default function App() {
     }
   }, [agentMode, canUseAgent, resetAgent]);
 
-  const allErrors = [modelsError, attachmentError, chatError, conversationsError]
-    .filter(Boolean) as Error[];
+  const allErrors = [
+    nvidiaConfigured ? modelsError : null,
+    attachmentError,
+    chatError,
+    conversationsError,
+  ].filter(Boolean) as Error[];
 
   if (conversationsLoading) {
     return (
