@@ -146,6 +146,7 @@ export type AgentStatus = 'completed' | 'approval_required' | 'max_turns' | 'err
 
 export interface AgentApprovalRequest {
   tool: string;
+  tool_call_id: string;
   model_name: string;
   description?: string | null;
   arguments: Record<string, unknown>;
@@ -187,4 +188,3 @@ export interface AgentStreamEvent {
   messages?: Array<Record<string, unknown>>;
   turns?: number;
 }
-
