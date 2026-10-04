@@ -107,8 +107,11 @@ export function useAgent({
         approval_grants: MCPApprovalGrant[];
       },
       runId: number,
+      signal: AbortSignal,
     ) => {
-      for await (const event of api.agentStream(request, abortControllerRef.current?.signal)) {
+      let terminal = false;
+
+      for await (const event of api.agentStream(request, signal)) {
         if (!isCurrentRun(runId)) return;
 
         switch (event.type) {
@@ -118,6 +121,7 @@ export function useAgent({
             }
             break;
           case 'approval_required': {
+            terminal = true;
             const response: AgentRunResponse = {
               status: 'approval_required',
               messages: event.messages ?? continuationRef.current as unknown as Array<Record<string, unknown>>,
@@ -128,6 +132,7 @@ export function useAgent({
             return;
           }
           case 'done': {
+            terminal = true;
             const response: AgentRunResponse = {
               status: 'completed',
               response: event.response ?? null,
@@ -139,6 +144,7 @@ export function useAgent({
             return;
           }
           case 'max_turns': {
+            terminal = true;
             const response: AgentRunResponse = {
               status: 'max_turns',
               response: null,
@@ -150,6 +156,7 @@ export function useAgent({
             return;
           }
           case 'error':
+            terminal = true;
             throw new APIError(
               event.message ?? 'Agent stream failed',
               event.code ?? 'AGENT_FAILED',
@@ -159,19 +166,18 @@ export function useAgent({
           case 'tool_result':
           case 'tool_error':
           case 'continue':
-            // Tool progress is represented by the persisted final gateway state.
-            // Keep the live assistant text stable while the gateway continues.
+            // Tool progress is represented by the final gateway conversation state.
             break;
           default:
             break;
         }
       }
 
-      if (isCurrentRun(runId) && status === 'running') {
+      if (isCurrentRun(runId) && !signal.aborted && !terminal) {
         throw new Error('Agent stream ended before a terminal event');
       }
     },
-    [absorbResponse, isCurrentRun, status],
+    [absorbResponse, isCurrentRun],
   );
 
   const startRun = useCallback(
@@ -197,6 +203,7 @@ export function useAgent({
             approval_grants: approvalGrants,
           },
           runId,
+          controller.signal,
         );
       } catch (err) {
         if (!isCurrentRun(runId)) return;
