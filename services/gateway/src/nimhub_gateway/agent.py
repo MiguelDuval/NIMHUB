@@ -38,6 +38,7 @@ class AgentApprovalRequest(BaseModel):
     description: str | None
     arguments: dict[str, Any]
     arguments_sha256: str
+    approval_token: str
     destructive: bool | None
     permission: str
 
@@ -155,6 +156,7 @@ class AgentRuntime:
         tool: MCPToolDefinition,
         arguments: dict[str, Any],
         arguments_sha256: str,
+        approval_token: str,
     ) -> AgentApprovalRequest:
         return AgentApprovalRequest(
             tool=tool.qualified_name,
@@ -162,6 +164,7 @@ class AgentRuntime:
             description=tool.description,
             arguments=arguments,
             arguments_sha256=arguments_sha256,
+            approval_token=approval_token,
             destructive=tool.destructive,
             permission=tool.permission,
         )
@@ -231,7 +234,12 @@ class AgentRuntime:
                     arguments = self._parse_arguments(call)
                     arguments_sha256 = exc.arguments_sha256
                     pending.append(
-                        self._approval_request(tool, arguments, arguments_sha256)
+                        self._approval_request(
+                            tool,
+                            arguments,
+                            arguments_sha256,
+                            exc.approval_token,
+                        )
                     )
                     parsed_calls.append((call, tool, arguments))
                 except (MCPPolicyError, MCPConfigError, json.JSONDecodeError) as exc:
@@ -392,7 +400,14 @@ class AgentRuntime:
                     )
                 except MCPApprovalRequired as exc:
                     arguments = self._parse_arguments(call)
-                    pending.append(self._approval_request(tool, arguments, exc.arguments_sha256))
+                    pending.append(
+                        self._approval_request(
+                            tool,
+                            arguments,
+                            exc.arguments_sha256,
+                            exc.approval_token,
+                        )
+                    )
                 except Exception as exc:
                     yield self._tool_error_event(call, str(exc))
                     continue
