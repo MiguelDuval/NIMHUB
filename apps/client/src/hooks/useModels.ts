@@ -21,10 +21,12 @@ export function useModels() {
       setModels(modelList);
       // Auto-select first chat-capable model ONLY on initial load
       if (!hasLoadedRef.current) {
-        const chatModel = modelList.find((m) => m.capabilities.includes('chat'));
-        if (chatModel && !selectedModelId) {
-          setSelectedModelId(chatModel.id);
-        }
+        setSelectedModelId((currentId) => {
+          if (currentId && modelList.some((model) => model.id === currentId)) {
+            return currentId;
+          }
+          return modelList.find((model) => model.capabilities.includes('chat'))?.id ?? '';
+        });
         hasLoadedRef.current = true;
       }
     } catch (err) {
