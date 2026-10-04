@@ -4,6 +4,7 @@ import { useModels } from './hooks/useModels';
 import { useChat } from './hooks/useChat';
 import { useAgent } from './hooks/useAgent';
 import { useMCPStatus } from './hooks/useMCPStatus';
+import { useGatewayStatus } from './hooks/useGatewayStatus';
 import { useAttachments } from './hooks/useAttachments';
 import { useGlobalEvents } from './hooks/useGlobalEvents';
 import { storage } from './services/storage';
@@ -15,6 +16,7 @@ import { ConversationList } from './components/ConversationList';
 import { WelcomeMessage } from './components/WelcomeMessage';
 import { Composer } from './components/Composer';
 import { AgentApprovalCard } from './components/AgentApprovalCard';
+import { GatewaySettings } from './components/GatewaySettings';
 import './styles.css';
 
 const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL ?? 'http://127.0.0.1:8787';
@@ -44,6 +46,7 @@ export default function App() {
     addMessage,
     updateMessage,
     clearError: clearConvError,
+    error: conversationsError,
   } = useConversations();
 
   const {
@@ -53,6 +56,7 @@ export default function App() {
     error: modelsError,
     selectModel,
     setModelFromConversation,
+    refreshModels,
   } = useModels();
 
   const {
@@ -65,6 +69,15 @@ export default function App() {
   } = useAttachments();
 
   useGlobalEvents();
+
+  const {
+    url: gatewayUrl,
+    status: gatewayStatus,
+    error: gatewayError,
+    nvidiaConfigured,
+    refresh: refreshGateway,
+    updateUrl: updateGatewayUrl,
+  } = useGatewayStatus();
 
   const [inputMessage, setInputMessage] = useState('');
   const [streamingContent, setStreamingContent] = useState('');
@@ -323,7 +336,8 @@ export default function App() {
   }, [agentMode, canUseAgent, resetAgent]);
 
   const isLoading = conversationsLoading || modelsLoading;
-  const allErrors = [modelsError, attachmentError, chatError].filter(Boolean) as Error[];
+  const allErrors = [modelsError, attachmentError, chatError, conversationsError, gatewayError]
+    .filter(Boolean) as Error[];
 
   if (isLoading) {
     return (
@@ -394,6 +408,18 @@ export default function App() {
           />
         </div>
         <div className="topbar-right">
+          <GatewaySettings
+            url={gatewayUrl}
+            status={gatewayStatus}
+            nvidiaConfigured={nvidiaConfigured}
+            error={gatewayError}
+            onSave={async (nextUrl) => {
+              await updateGatewayUrl(nextUrl);
+              await refreshModels();
+              await refreshMCP();
+            }}
+            onRefresh={refreshGateway}
+          />
           <div className={"status-indicator " + statusClass}>
             <span className="status-dot"></span>
             <span>
