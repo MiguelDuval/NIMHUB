@@ -363,7 +363,7 @@ async def agent(
         )
 
     try:
-        return await agent_runtime.run(request)
+        return await agent_runtime.run(request, api_key=nvidia_api_key)
     except MCPConfigError as exc:
         raise _mcp_error(exc, code="MCP_AGENT_FAILED", status=400) from exc
     except Exception as exc:
