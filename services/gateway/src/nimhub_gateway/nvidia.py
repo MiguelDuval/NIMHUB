@@ -227,19 +227,25 @@ def normalize_nim_model(raw_model: dict) -> ModelCapability:
 
 
 class NIMClient:
-    def _headers(self) -> dict[str, str]:
-        if not settings.nvidia_api_key:
+    def _headers(self, api_key: str | None = None) -> dict[str, str]:
+        key = settings.nvidia_api_key if api_key is None else api_key
+        if not key:
             raise RuntimeError('NVIDIA_API_KEY is not configured')
         return {
-            'Authorization': f'Bearer {settings.nvidia_api_key}',
+            'Authorization': f'Bearer {key}',
             'Content-Type': 'application/json',
         }
 
-    async def list_models(self) -> dict:
+    async def list_models(
+        self,
+        api_key: str | None = None,
+        base_url: str | None = None,
+    ) -> dict:
+        endpoint = (base_url or settings.nvidia_base_url).rstrip("/")
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.get(
-                f'{settings.nvidia_base_url.rstrip("/")}/models',
-                headers=self._headers(),
+                f'{endpoint}/models',
+                headers=self._headers(api_key),
             )
             response.raise_for_status()
             data = response.json()
