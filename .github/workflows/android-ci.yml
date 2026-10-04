@@ -107,3 +107,62 @@ jobs:
         run: pip install -e '.[test]'
       - name: Test
         run: pytest -q
+
+
+  github-mcp-smoke:
+    name: GitHub MCP smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: services/gateway
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: ${{ github.token }}
+      GITHUB_TOOLSETS: repos
+      MCP_SERVERS_JSON: >-
+        {"servers":[{"id":"github","transport":"stdio","permission":"read",
+        "command":"docker","args":["run","-i","--rm",
+        "-e","GITHUB_PERSONAL_ACCESS_TOKEN","-e","GITHUB_TOOLSETS",
+        "-e","GITHUB_READ_ONLY=1","ghcr.io/github/github-mcp-server"],
+        "env_vars":{"GITHUB_PERSONAL_ACCESS_TOKEN":"GITHUB_PERSONAL_ACCESS_TOKEN",
+        "GITHUB_TOOLSETS":"GITHUB_TOOLSETS"}}]}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
+        run: pip install -e '.[test]'
+      - name: Start gateway
+        run: |
+          nohup python -m uvicorn nimhub_gateway.main:app             --host 127.0.0.1 --port 8787             > /tmp/nimhub-gateway.log 2>&1 &
+          echo $! > /tmp/nimhub-gateway.pid
+          python - <<'PY'
+          import time
+          import urllib.request
+
+          for _ in range(60):
+              try:
+                  with urllib.request.urlopen(
+                      "http://127.0.0.1:8787/api/health",
+                      timeout=2,
+                  ):
+                      break
+              except Exception:
+                  time.sleep(1)
+          else:
+              print(open("/tmp/nimhub-gateway.log", encoding="utf-8").read())
+              raise SystemExit("gateway did not become ready")
+          PY
+      - name: Run GitHub MCP smoke
+        run: python tests/smoke_github_mcp.py
+      - name: Stop gateway
+        if: always()
+        run: |
+          if [ -f /tmp/nimhub-gateway.pid ]; then
+            kill "$(cat /tmp/nimhub-gateway.pid)" || true
+          fi
+          if [ -f /tmp/nimhub-gateway.log ]; then
+            tail -n 100 /tmp/nimhub-gateway.log || true
+          fi
