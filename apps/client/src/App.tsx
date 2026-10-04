@@ -89,6 +89,7 @@ export default function App() {
   const [retryCount, setRetryCount] = useState(0);
   const [agentMode, setAgentMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showAgentInfo, setShowAgentInfo] = useState(false);
   const [workspaceMode, setWorkspaceMode] = useState<MediaMode | 'chat'>('chat');
   const currentConversationRef = useRef(currentConversation);
   const messagesAreaRef = useRef<HTMLDivElement>(null);
@@ -337,13 +338,22 @@ export default function App() {
 
   const handleAgentToggle = useCallback(() => {
     if (effectiveBusy) return;
+    if (!canUseAgent) {
+      setShowAgentInfo(true);
+      return;
+    }
+    setShowAgentInfo(false);
     if (agentMode) {
       setAgentMode(false);
       resetAgent();
       return;
     }
     setAgentMode(true);
-  }, [agentMode, effectiveBusy, resetAgent]);
+  }, [agentMode, effectiveBusy, resetAgent, canUseAgent]);
+
+  useEffect(() => {
+    if (canUseAgent) setShowAgentInfo(false);
+  }, [canUseAgent]);
 
   const handleConversationSelect = useCallback(
     async (conversationId: string) => {
@@ -489,15 +499,19 @@ export default function App() {
           <button
             className={'mode-toggle ' + (agentMode ? 'active' : '')}
             onClick={handleAgentToggle}
-            disabled={!canUseAgent || effectiveBusy}
-            title={
-              canUseAgent
-                ? 'Toggle model-driven MCP agent mode'
-                : 'Selected model does not advertise tool-calling'
-            }
+            disabled={effectiveBusy}
+            aria-expanded={showAgentInfo}
+            title={canUseAgent ? 'Toggle model-driven MCP agent mode' : (agentAvailabilityReason ?? 'Agent is unavailable')}
           >
             {agentMode ? 'Agent ON' : 'Agent'}
           </button>
+          {showAgentInfo && !canUseAgent && (
+            <div className="agent-availability-popover" role="status">
+              <strong>Agent unavailable</strong>
+              <span>{agentAvailabilityReason}</span>
+              <button type="button" className="btn-secondary" onClick={() => setShowSettings(true)}>Open Settings</button>
+            </div>
+          )}
           <ModelSelector
             models={models}
             selectedModelId={selectedModelId}
@@ -506,6 +520,7 @@ export default function App() {
             loading={modelsLoading}
             showDetails={showModelDetails}
             onToggleDetails={() => setShowModelDetails(!showModelDetails)}
+            filterCapability="chat"
           />
           <MCPStatus
             enabled={canUseAgent}
