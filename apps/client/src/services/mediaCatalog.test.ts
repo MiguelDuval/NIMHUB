@@ -4,7 +4,7 @@ import { defaultMediaModel, getMediaModelDefinition, getMediaModelsForKind } fro
 describe('curated NVIDIA media catalog', () => {
   it('limits Image Studio to image-capable models', () => {
     expect(getMediaModelsForKind('image').map((model) => model.id)).toEqual([
-      'nvidia/cosmos3-nano', 'qwen/qwen-image', 'qwen/qwen-image-edit-2511',
+      'nvidia/cosmos3-nano', 'qwen/qwen-image-2512', 'qwen/qwen-image-edit-2511',
     ]);
   });
 
