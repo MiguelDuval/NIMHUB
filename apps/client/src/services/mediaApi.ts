@@ -657,7 +657,6 @@ export async function generateVideo(
     };
   }
 
-  onProgress?.({ phase: 'completed', progress: 100 });
   throw new APIError(
     'Video endpoint returned no downloadable video or job id.',
     'MEDIA_EMPTY_RESULT',
