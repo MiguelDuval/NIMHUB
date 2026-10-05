@@ -708,13 +708,13 @@ export default function App() {
               </div>
             )}
 
-            {agentActivities.length > 0 && agentStatus === 'running' && (
+            {agentActivities.length > 0 && agentStatus !== 'idle' && agentStatus !== 'cancelled' && (
               <div className="agent-activity" aria-live="polite" aria-label="Agent activity">
                 {agentActivities.map((activity) => (
                   <div className="agent-activity-item" key={activity.id}>
                     <span className={'agent-activity-dot ' + activity.type}></span>
                     <span className="agent-activity-label">
-                      {activity.type === 'tool_error' ? 'Tool error' : 'Tool completed'}
+                      {activity.type === 'tool_error' ? 'Tool error' : agentStatus === 'running' ? 'Tool completed' : 'Tool completed'}
                     </span>
                     <strong>{activity.tool ?? 'MCP tool'}</strong>
                     {activity.message && <span className="agent-activity-message">{activity.message}</span>}
