@@ -71,6 +71,12 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
   const mediaModels = useMemo(() => (visualKind ? getMediaModelsForKind(visualKind) : []), [visualKind]);
   const selectedMediaModel = getMediaModelDefinition(mediaModelId);
 
+  const visualProviderReady = Boolean(
+    mediaProfile?.baseUrl &&
+    selectedMediaModel &&
+    (selectedMediaModel.availability === 'self-hosted' || mediaProfile.apiKey),
+  );
+
   const loadMediaProfile = useCallback(async () => {
     if (!visualKind) {
       setMediaProfile(null);
@@ -143,7 +149,7 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
 
   const runImageGenerate = async () => {
     if (!prompt.trim()) return;
-    if (!nvidiaConfigured) { onOpenSettings(); return; }
+    if (!visualProviderReady) { onOpenSettings(); return; }
     if (!selectedMediaModel?.functions.includes('image-generation')) { setError('Selected model does not support image generation.'); return; }
     setBusy(true); setError(null); clearArtifact();
     try {
@@ -158,7 +164,7 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
 
   const runImageEdit = async () => {
     if (!prompt.trim() || !referenceImage) return;
-    if (!nvidiaConfigured) { onOpenSettings(); return; }
+    if (!visualProviderReady) { onOpenSettings(); return; }
     if (!selectedMediaModel?.functions.includes('image-editing')) { setError('Select Qwen Image Edit 2511 for reference-image editing.'); return; }
     setBusy(true); setError(null); clearArtifact();
     try {
@@ -233,7 +239,7 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
 
   const runVideo = async () => {
     if (!prompt.trim()) return;
-    if (!nvidiaConfigured) { onOpenSettings(); return; }
+    if (!visualProviderReady) { onOpenSettings(); return; }
     if (!selectedMediaModel?.functions.includes('video-generation')) { setError('Selected model does not support video generation.'); return; }
     setBusy(true); setError(null); clearArtifact();
     try {
@@ -249,8 +255,8 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
   if (mode === 'image') return (
     <div className="media-studio">
       <div className="media-studio-header">
-        <div><span className="settings-kicker">MEDIA STUDIO · IMAGE</span><h2>Generate or edit an image</h2><p>Only image-capable NVIDIA models appear here. Choose the target model before generating.</p></div>
-        {!nvidiaConfigured && <button className="btn-primary" onClick={onOpenSettings}>Configure NVIDIA</button>}
+        <div><span className="settings-kicker">MEDIA STUDIO · IMAGE</span><h2>Generate or edit an image</h2><p>Only image-capable NVIDIA models appear here. Hosted models need an endpoint-access key; self-hosted NIMs may run without an API key.</p></div>
+        {!visualProviderReady && <button className="btn-primary" onClick={onOpenSettings}>Configure media</button>}
       </div>
       <section className="media-model-card"><label className="settings-field"><span>Model</span><select value={mediaModelId} onChange={(event) => void handleMediaModelChange(event.target.value)} disabled={busy}>{mediaModels.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.availability === "hosted" ? "Hosted" : "Self-hosted"}</option>)}</select></label>{selectedMediaModel && <div className="media-model-explainer"><strong>{selectedMediaModel.name}</strong><span>{selectedMediaModel.description}</span><span>Route: <code>{selectedMediaModel.defaultBaseUrl || "configure in Settings"}</code>{selectedMediaModel.endpoint}</span></div>}</section><label className="media-prompt-field"><span>Prompt</span><textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the image…" disabled={busy} /></label>
       <div className="media-control-grid">
@@ -258,8 +264,8 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
         <label className="settings-field"><span>Reference image for editing</span><input type="file" accept="image/*" onChange={(e) => setReferenceImage(e.target.files?.[0] ?? null)} disabled={busy} /></label>
       </div>
       <div className="media-action-row">
-        <button className="btn-primary" onClick={() => void runImageGenerate()} disabled={busy || !prompt.trim() || !selectedMediaModel?.functions.includes('image-generation')}>Generate image</button>
-        <button className="btn-secondary" onClick={() => void runImageEdit()} disabled={busy || !prompt.trim() || !referenceImage || !selectedMediaModel?.functions.includes('image-editing')}>Edit reference image</button>
+        <button className="btn-primary" onClick={() => void runImageGenerate()} disabled={busy || !prompt.trim() || !visualProviderReady || !selectedMediaModel?.functions.includes('image-generation')}>Generate image</button>
+        <button className="btn-secondary" onClick={() => void runImageEdit()} disabled={busy || !prompt.trim() || !referenceImage || !visualProviderReady || !selectedMediaModel?.functions.includes('image-editing')}>Edit reference image</button>
         {referenceImage && <button className="btn-secondary" onClick={() => setReferenceImage(null)} disabled={busy}>Remove reference</button>}
       </div>
       {artifact?.type === 'image' && <img className="media-result-image" src={artifact.url} alt={artifact.name} />}
@@ -293,8 +299,8 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
   return (
     <div className="media-studio">
       <div className="media-studio-header">
-        <div><span className="settings-kicker">MEDIA STUDIO · VIDEO</span><h2>Generate video</h2><p>Only video-capable NVIDIA models appear here. Choose the target model before generating.</p></div>
-        {!nvidiaConfigured && <button className="btn-primary" onClick={onOpenSettings}>Configure NVIDIA</button>}
+        <div><span className="settings-kicker">MEDIA STUDIO · VIDEO</span><h2>Generate video</h2><p>Only video-capable NVIDIA models appear here. Hosted models need an endpoint-access key; self-hosted NIMs may run without an API key.</p></div>
+        {!visualProviderReady && <button className="btn-primary" onClick={onOpenSettings}>Configure media</button>}
       </div>
       <section className="media-model-card"><label className="settings-field"><span>Model</span><select value={mediaModelId} onChange={(event) => void handleMediaModelChange(event.target.value)} disabled={busy}>{mediaModels.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.availability === "hosted" ? "Hosted" : "Self-hosted"}</option>)}</select></label>{selectedMediaModel && <div className="media-model-explainer"><strong>{selectedMediaModel.name}</strong><span>{selectedMediaModel.description}</span><span>Route: <code>{selectedMediaModel.defaultBaseUrl || "configure in Settings"}</code>{selectedMediaModel.endpoint}</span></div>}</section><label className="media-prompt-field"><span>Prompt</span><textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the video…" disabled={busy} /></label>
       <div className="media-control-grid">
@@ -303,7 +309,7 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
         <label className="settings-field"><span>Reference image</span><input type="file" accept="image/*" onChange={(e) => setVideoImage(e.target.files?.[0] ?? null)} disabled={busy} /></label>
       </div>
       <div className="media-action-row">
-        <button className="btn-primary" onClick={() => void runVideo()} disabled={busy || !prompt.trim() || !selectedMediaModel?.functions.includes('video-generation')}>Generate video</button>
+        <button className="btn-primary" onClick={() => void runVideo()} disabled={busy || !prompt.trim() || !visualProviderReady || !selectedMediaModel?.functions.includes('video-generation')}>Generate video</button>
         {videoImage && <button className="btn-secondary" onClick={() => setVideoImage(null)} disabled={busy}>Remove reference</button>}
       </div>
       {artifact?.type === 'video' && <video className="media-result-video" src={artifact.url} controls playsInline />}
