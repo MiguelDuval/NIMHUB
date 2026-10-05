@@ -55,6 +55,7 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
   const [error, setError] = useState<string | null>(null);
   const [artifact, setArtifact] = useState<ArtifactPreview | null>(null);
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
+  const [imageOperation, setImageOperation] = useState<'generate' | 'edit'>('generate');
   const [videoImage, setVideoImage] = useState<File | null>(null);
   const [videoSeconds, setVideoSeconds] = useState(4);
   const [imageSize, setImageSize] = useState('1024x1024');
@@ -69,6 +70,14 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
 
   const visualKind = mode === 'image' || mode === 'video' ? mode : null;
   const mediaModels = useMemo(() => (visualKind ? getMediaModelsForKind(visualKind) : []), [visualKind]);
+  const visibleMediaModels = useMemo(
+    () => mode === 'image'
+      ? mediaModels.filter((item) => item.functions.includes(
+        imageOperation === 'generate' ? 'image-generation' : 'image-editing',
+      ))
+      : mediaModels,
+    [imageOperation, mediaModels, mode],
+  );
   const selectedMediaModel = getMediaModelDefinition(mediaModelId);
 
   const visualProviderReady = Boolean(
@@ -88,13 +97,13 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
       const profile = await getMediaProviderConfig(visualKind);
       setMediaProfile(profile);
       const inCatalog = Boolean(getMediaModelDefinition(profile.model)) &&
-        mediaModels.some((item) => item.id === profile.model);
-      setMediaModelId(inCatalog ? profile.model : mediaModels[0]?.id ?? '');
+        visibleMediaModels.some((item) => item.id === profile.model);
+      setMediaModelId(inCatalog ? profile.model : visibleMediaModels[0]?.id ?? '');
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load media profile');
     }
-  }, [mediaModels, visualKind]);
+  }, [visibleMediaModels, visualKind]);
 
   useEffect(() => {
     void loadMediaProfile();
@@ -109,7 +118,7 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
   }, [loadMediaProfile, visualKind]);
 
   const handleMediaModelChange = async (nextId: string) => {
-    if (!visualKind) return;
+    if (!visualKind || !visibleMediaModels.some((item) => item.id === nextId)) return;
     const next = getMediaModelDefinition(nextId);
     if (!next) return;
     const previous = getMediaModelDefinition(mediaModelId);
@@ -122,6 +131,13 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
     try { await setMediaProviderModel(visualKind, next.id, nextBase); }
     catch (err) { setError(err instanceof Error ? err.message : 'Could not select media model'); }
   };
+
+  useEffect(() => {
+    if (mode !== 'image') return;
+    if (selectedMediaModel && visibleMediaModels.some((item) => item.id === selectedMediaModel.id)) return;
+    const fallback = visibleMediaModels[0];
+    if (fallback) void handleMediaModelChange(fallback.id);
+  }, [handleMediaModelChange, mode, selectedMediaModel, visibleMediaModels]);
 
   useEffect(() => () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -166,6 +182,7 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
     setReferenceImage(file);
     if (!file || !visualKind || visualKind !== 'image') return;
 
+    setImageOperation('edit');
     const editingModel = mediaModels.find((item) => item.functions.includes('image-editing'));
     if (editingModel && !selectedMediaModel?.functions.includes('image-editing')) {
       await handleMediaModelChange(editingModel.id);
@@ -268,14 +285,21 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
         <div><span className="settings-kicker">MEDIA STUDIO · IMAGE</span><h2>Generate or edit an image</h2><p>Only image-capable NVIDIA models appear here. Hosted models need an endpoint-access key; self-hosted NIMs may run without an API key.</p></div>
         {!visualProviderReady && <button className="btn-primary" onClick={onOpenSettings}>Configure media</button>}
       </div>
-      <section className="media-model-card"><label className="settings-field"><span>Model</span><select value={mediaModelId} onChange={(event) => void handleMediaModelChange(event.target.value)} disabled={busy}>{mediaModels.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.availability === "hosted" ? "Hosted" : "Self-hosted"}</option>)}</select></label>{selectedMediaModel && <div className="media-model-explainer"><strong>{selectedMediaModel.name}</strong><span>{selectedMediaModel.description}</span><span>Route: <code>{selectedMediaModel.defaultBaseUrl || "configure in Settings"}</code>{selectedMediaModel.endpoint}</span></div>}</section><label className="media-prompt-field"><span>Prompt</span><textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the image…" disabled={busy} /></label>
+      <div className="media-action-row">
+        <button className={imageOperation === 'generate' ? 'btn-primary' : 'btn-secondary'} type="button" onClick={() => setImageOperation('generate')} disabled={busy}>Generate</button>
+        <button className={imageOperation === 'edit' ? 'btn-primary' : 'btn-secondary'} type="button" onClick={() => setImageOperation('edit')} disabled={busy}>Edit reference</button>
+      </div>
+      <section className="media-model-card"><label className="settings-field"><span>{imageOperation === 'generate' ? 'Generation model' : 'Editing model'}</span><select value={mediaModelId} onChange={(event) => void handleMediaModelChange(event.target.value)} disabled={busy}>{visibleMediaModels.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.availability === "hosted" ? "Hosted" : "Self-hosted"}</option>)}</select></label>{selectedMediaModel && <div className="media-model-explainer"><strong>{selectedMediaModel.name}</strong><span>{selectedMediaModel.description}</span><span>Route: <code>{selectedMediaModel.defaultBaseUrl || "configure in Settings"}</code>{selectedMediaModel.endpoint}</span></div>}</section><label className="media-prompt-field"><span>Prompt</span><textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the image…" disabled={busy} /></label>
       <div className="media-control-grid">
         <label className="settings-field"><span>Size</span><select value={imageSize} onChange={(e) => setImageSize(e.target.value)} disabled={busy}><option>1024x1024</option><option>832x480</option><option>1280x720</option></select></label>
-        <label className="settings-field"><span>Reference image for editing</span><input type="file" accept="image/*" onChange={(e) => void handleReferenceImageChange(e.target.files?.[0] ?? null)} disabled={busy} /></label>
+        {imageOperation === 'edit' && <label className="settings-field"><span>Reference image</span><input type="file" accept="image/*" onChange={(e) => void handleReferenceImageChange(e.target.files?.[0] ?? null)} disabled={busy} /></label>}
       </div>
       <div className="media-action-row">
-        <button className="btn-primary" onClick={() => void runImageGenerate()} disabled={busy || !prompt.trim() || !visualProviderReady || !selectedMediaModel?.functions.includes('image-generation')}>Generate image</button>
-        <button className="btn-secondary" onClick={() => void runImageEdit()} disabled={busy || !prompt.trim() || !referenceImage || !visualProviderReady || !selectedMediaModel?.functions.includes('image-editing')}>Edit reference image</button>
+        {imageOperation === 'generate' ? (
+          <button className="btn-primary" onClick={() => void runImageGenerate()} disabled={busy || !prompt.trim() || !visualProviderReady || !selectedMediaModel?.functions.includes('image-generation')}>Generate image</button>
+        ) : (
+          <button className="btn-primary" onClick={() => void runImageEdit()} disabled={busy || !prompt.trim() || !referenceImage || !visualProviderReady || !selectedMediaModel?.functions.includes('image-editing')}>Edit image</button>
+        )}
         {referenceImage && <button className="btn-secondary" onClick={() => setReferenceImage(null)} disabled={busy}>Remove reference</button>}
       </div>
       {artifact?.type === 'image' && <img className="media-result-image" src={artifact.url} alt={artifact.name} />}
