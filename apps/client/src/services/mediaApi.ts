@@ -18,7 +18,7 @@ import { normalizeNvidiaApiKey } from './nvidiaConfig';
 interface NimhubMediaHttpPlugin {
   postMultipart(options: {
     url: string;
-    apiKey?: string;
+    apiKey?: string | null;
     fields?: Record<string, string>;
     fileBase64?: string;
     fileFieldName?: string;
@@ -41,6 +41,15 @@ function assertNative(): void {
   if (!Capacitor.isNativePlatform()) {
     throw new Error('NIM Hub media transport is available only in the Android app');
   }
+}
+
+function firstBase64Image(response: ImageGenerationResponse | ImageEditResponse): string | null {
+  return response.data?.[0]?.b64_json ?? null;
+}
+
+function firstBase64Video(response: VideoGenerationResponse): string | null {
+  const item = Array.isArray(response.data) ? response.data[0] : response.data;
+  return item?.b64_json ?? null;
 }
 
 function joinEndpoint(baseUrl: string, path: string): string {
@@ -559,17 +568,13 @@ export async function generateVideo(
   const initialStatus = String(created.status ?? '').toLowerCase();
   const jobId = created.id;
   if (['failed', 'cancelled', 'canceled', 'error'].includes(initialStatus)) {
-    const rawError = (created as Record<string, unknown>).error;
+    const rawError = created.error;
     const message = typeof rawError === 'string'
       ? rawError
-      : typeof rawError === 'object' && rawError !== null && typeof (rawError as Record<string, unknown>).message === 'string'
-        ? String((rawError as Record<string, unknown>).message)
-        : `Video job ${initialStatus}`;
+      : rawError?.message || `Video job ${initialStatus}`;
     throw new APIError(message, 'MEDIA_JOB_FAILED', 502, false, 'nvidia', jobId);
   }
-  const initialProgress = typeof (created as Record<string, unknown>).progress === 'number'
-    ? (created as Record<string, number>).progress
-    : undefined;
+  const initialProgress = created.progress;
   if (['queued'].includes(initialStatus)) {
     onProgress?.({ phase: 'queued', progress: initialProgress });
   } else if (['in_progress', 'running', 'processing'].includes(initialStatus)) {
@@ -587,17 +592,16 @@ export async function generateVideo(
         30000,
       );
       const status = String(latest.status ?? '').toLowerCase();
-      const progress = typeof (latest as Record<string, unknown>).progress === 'number'
-        ? (latest as Record<string, number>).progress
-        : undefined;
+      const progress = latest.progress;
       if (status === 'queued') onProgress?.({ phase: 'queued', progress });
       else if (['in_progress', 'running', 'processing'].includes(status)) onProgress?.({ phase: 'rendering', progress });
       if (['failed', 'cancelled', 'canceled', 'error'].includes(status)) {
-        const detail = typeof latest === 'object' && latest !== null
-          ? (latest as Record<string, unknown>).error
-          : undefined;
+        const detail = latest.error;
+        const message = typeof detail === 'string'
+          ? detail
+          : detail?.message || `Video job ${status}`;
         throw new APIError(
-          typeof detail === 'string' ? detail : `Video job ${status}`,
+          message,
           'MEDIA_JOB_FAILED',
           502,
           false,
