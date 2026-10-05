@@ -14,6 +14,10 @@ describe('curated NVIDIA media catalog', () => {
     ]);
   });
 
+  it('uses the async video job endpoint for Wan2.2', () => {
+    expect(getMediaModelDefinition('wan-ai/wan2.2')?.endpoint).toBe('/videos');
+  });
+
   it('uses Cosmos3 as the first hosted model for image and video', () => {
     expect(defaultMediaModel('image').id).toBe('nvidia/cosmos3-nano');
     expect(defaultMediaModel('video').id).toBe('nvidia/cosmos3-nano');
