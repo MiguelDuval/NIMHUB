@@ -1,7 +1,23 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { api } from './api';
+import { api, APIError } from './api';
 import { normalizeGatewayUrl } from './gatewayConfig';
+
+describe('APIError diagnostics', () => {
+  it('keeps video job IDs separate from request IDs', () => {
+    const error = new APIError(
+      'render failed',
+      'MEDIA_JOB_FAILED',
+      502,
+      false,
+      'nvidia',
+      'request-123',
+      'job-456',
+    );
+    expect(error.requestId).toBe('request-123');
+    expect(error.jobId).toBe('job-456');
+  });
+});
 
 describe('MCP gateway API', () => {
   it('rejects credential-bearing gateway URLs', () => {
