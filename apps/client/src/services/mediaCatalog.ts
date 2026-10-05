@@ -6,6 +6,7 @@ export type MediaCatalogKind = 'image' | 'video' | 'asr' | 'tts';
 export type MediaFunction = 'image-generation' | 'image-editing' | 'video-generation' | 'asr' | 'tts';
 export type MediaTransport = 'cosmos3' | 'openai-image' | 'openai-video' | 'speech';
 export type MediaAvailability = 'hosted' | 'self-hosted';
+export type MediaProbeStrategy = 'cosmos-validation' | 'health-ready' | 'models';
 
 export interface MediaModelDefinition {
   id: string;
@@ -16,6 +17,7 @@ export interface MediaModelDefinition {
   availability: MediaAvailability;
   defaultBaseUrl: string;
   endpoint: string;
+  probeStrategy: MediaProbeStrategy;
   description: string;
   credentialNote: string;
 }
@@ -30,8 +32,9 @@ export const MEDIA_MODEL_CATALOG: MediaModelDefinition[] = [
     availability: 'hosted',
     defaultBaseUrl: 'https://ai.api.nvidia.com/v1',
     endpoint: '/cosmos/nvidia/cosmos3-nano',
+    probeStrategy: 'cosmos-validation',
     description: 'Unified NVIDIA visual generator: text→image, text→video and image→video.',
-    credentialNote: 'Uses the NVIDIA API key that has access to the hosted Cosmos3 endpoint.',
+    credentialNote: 'Uses the endpoint-access key issued for the hosted Cosmos3 API endpoint.',
   },
   {
     id: 'qwen/qwen-image-2512',
@@ -42,6 +45,7 @@ export const MEDIA_MODEL_CATALOG: MediaModelDefinition[] = [
     availability: 'self-hosted',
     defaultBaseUrl: '',
     endpoint: '/images/generations',
+    probeStrategy: 'health-ready',
     description: 'Image generation NIM. Deploy it, then enter the invocation/base URL of that deployment.',
     credentialNote: 'Use the key and URL belonging to the target NIM deployment.'
   },
@@ -54,6 +58,7 @@ export const MEDIA_MODEL_CATALOG: MediaModelDefinition[] = [
     availability: 'self-hosted',
     defaultBaseUrl: '',
     endpoint: '/images/edits',
+    probeStrategy: 'health-ready',
     description: 'Image editing NIM for reference-image workflows. Use the deployed Qwen Image Edit variant.',
     credentialNote: 'Use the key and URL belonging to the target NIM deployment.',
   },
@@ -66,6 +71,7 @@ export const MEDIA_MODEL_CATALOG: MediaModelDefinition[] = [
     availability: 'self-hosted',
     defaultBaseUrl: '',
     endpoint: '/videos',
+    probeStrategy: 'health-ready',
     description: 'NVIDIA Visual GenAI video NIM. The deployment is configured as t2v or i2v; NIM Hub uses its job-based lifecycle for either workflow.',
     credentialNote: 'Use the invocation/base URL of the deployed Wan2.2 NIM.',
   },
