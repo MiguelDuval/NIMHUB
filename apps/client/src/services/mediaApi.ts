@@ -144,6 +144,78 @@ function assertSuccess(response: NativeMultipartResponse, operation: string): vo
   );
 }
 
+export interface MediaProviderProbe {
+  ok: boolean;
+  status: number;
+  message: string;
+  target: string;
+}
+
+export async function testMediaProvider(kind: MediaProviderKind): Promise<MediaProviderProbe> {
+  assertNative();
+  const profile = await getMediaProviderConfig(kind);
+  if (!profile.baseUrl) {
+    throw new APIError(
+      `No API base URL configured for ${kind.toUpperCase()}.`,
+      'MEDIA_ENDPOINT_NOT_CONFIGURED',
+      503,
+      false,
+      'nvidia',
+    );
+  }
+
+  const model = getMediaModelDefinition(profile.model);
+  const selfHosted = model?.availability === 'self-hosted';
+  const probePath = selfHosted ? '/health/ready' : '/models';
+  const target = joinEndpoint(profile.baseUrl, probePath);
+
+  const response = await CapacitorHttp.request({
+    url: target,
+    method: 'GET',
+    headers: {
+      ...(profile.apiKey ? { Authorization: `Bearer ${normalizeNvidiaApiKey(profile.apiKey)}` } : {}),
+      Accept: 'application/json',
+    },
+    connectTimeout: 15000,
+    readTimeout: 15000,
+    responseType: 'json',
+  });
+
+  const data = response.data;
+  if (response.status < 200 || response.status >= 300) {
+    const detail = typeof data === 'object' && data !== null ? data as Record<string, unknown> : {};
+    const nested = detail.error && typeof detail.error === 'object' ? detail.error as Record<string, unknown> : {};
+    const message = String(
+      nested.message ??
+      detail.message ??
+      `Media endpoint probe failed: HTTP ${response.status}`,
+    );
+    throw new APIError(
+      response.status === 401 || response.status === 403 ? 'Media endpoint rejected the configured API key' : message,
+      response.status === 429 ? 'NVIDIA_RATE_LIMITED' : 'MEDIA_PROBE_FAILED',
+      response.status,
+      response.status === 429 || response.status >= 500,
+      'nvidia',
+    );
+  }
+
+  if (selfHosted) {
+    return {
+      ok: true,
+      status: response.status,
+      message: `${model?.name ?? 'NIM'} deployment is live and ready.`,
+      target,
+    };
+  }
+
+  return {
+    ok: true,
+    status: response.status,
+    message: `NVIDIA hosted endpoint is reachable. The selected ${model?.name ?? 'model'} will be verified by the actual generation request.`,
+    target,
+  };
+}
+
 export async function generateImage(request: ImageGenerationRequest): Promise<ImageGenerationResponse> {
   assertNative();
   const profile = await requireProfile('image', { allowKeyless: true });
@@ -201,7 +273,7 @@ export async function generateImage(request: ImageGenerationRequest): Promise<Im
 
 export async function editImage(request: ImageEditRequest): Promise<ImageEditResponse> {
   assertNative();
-  const profile = await requireProfile('image' , { allowKeyless: true });
+  const profile = await requireProfile('image', { allowKeyless: true });
   const response = await NativeMediaHttp.postMultipart({
     url: joinEndpoint(profile.baseUrl, '/images/edits'),
     apiKey: profile.apiKey,
@@ -227,10 +299,10 @@ export async function transcribeAudio(
   options?: { language?: string; wordTimeOffsets?: boolean; fileName?: string },
 ): Promise<string> {
   assertNative();
-  const profile = await requireProfile('asr' , { allowKeyless: true });
+  const profile = await requireProfile('asr', { allowKeyless: true });
   const response = await NativeMediaHttp.postMultipart({
     url: joinEndpoint(profile.baseUrl, '/audio/transcriptions'),
-    apiKey: profile.apiKey!,
+    apiKey: profile.apiKey,
     fields: {
       ...(profile.model ? { model: profile.model } : {}),
       ...(options?.language ? { language: options.language } : {}),
@@ -256,7 +328,7 @@ export async function synthesizeSpeech(
   options?: Partial<TTSRequest>,
 ): Promise<{ audio: Blob; contentType: string }> {
   assertNative();
-  const profile = await requireProfile('tts' , { allowKeyless: true });
+  const profile = await requireProfile('tts', { allowKeyless: true });
   const response = await NativeMediaHttp.postMultipart({
     url: joinEndpoint(profile.baseUrl, '/audio/synthesize'),
     apiKey: profile.apiKey!,
