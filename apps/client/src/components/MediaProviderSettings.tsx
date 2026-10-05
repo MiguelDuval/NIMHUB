@@ -48,7 +48,11 @@ function VisualProfileEditor({ kind, profile, onReload }: Props) {
   const save = async () => {
     setBusy(true); setError(null); setMessage(null);
     try {
-      await saveMediaProviderConfig(kind, { apiKey, baseUrl, model });
+      await saveMediaProviderConfig(kind, {
+        apiKey: apiKey.trim() ? apiKey : undefined,
+        baseUrl,
+        model,
+      });
       await onReload(); setApiKey('');
       setMessage('Profile saved. Credentials remain in Android secure storage.');
     } catch (err) { setError(err instanceof Error ? err.message : 'Could not save media profile'); }
@@ -74,11 +78,25 @@ function VisualProfileEditor({ kind, profile, onReload }: Props) {
   const useChatKey = async () => {
     setBusy(true); setError(null);
     try {
-      await saveMediaProviderConfig(kind, { apiKey: '', baseUrl, model });
+      await saveMediaProviderConfig(kind, { apiKey: null, baseUrl, model });
       await onReload();
       setMessage('Dedicated key removed. This profile now reuses the Chat NVIDIA key.');
     } catch (err) { setError(err instanceof Error ? err.message : 'Could not switch to Chat key'); }
     finally { setBusy(false); }
+  };
+
+  const clearDedicatedKey = async () => {
+    setBusy(true); setError(null); setMessage(null);
+    try {
+      await saveMediaProviderConfig(kind, { apiKey: null, baseUrl, model });
+      await onReload();
+      setApiKey('');
+      setMessage('Dedicated key removed. The profile will reuse the Chat key when available.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not clear dedicated key');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const reset = async () => {
@@ -124,7 +142,7 @@ function VisualProfileEditor({ kind, profile, onReload }: Props) {
           : 'This is not a model name. It is the URL where your deployed NIM is running.'}
       </p>
       <label className="settings-field"><span>Dedicated NVIDIA API key <em>optional</em></span><input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="off" placeholder={dedicated ? 'Enter a new key to replace it' : 'Leave blank to reuse Chat key'} disabled={busy} /></label>
-      <div className="settings-actions"><button className="btn-primary" type="button" onClick={() => void save()} disabled={busy || testing || !model}>{busy ? 'Saving…' : 'Save'}</button><button className="btn-secondary" type="button" onClick={() => void testConnection()} disabled={busy || testing || !model}>{testing ? 'Testing…' : 'Test connection'}</button>{dedicated && <button className="btn-secondary" type="button" onClick={() => void useChatKey()} disabled={busy || testing}>Use Chat key</button>}<button className="btn-secondary" type="button" onClick={() => void reset()} disabled={busy || testing}>Reset</button></div>
+      <div className="settings-actions"><button className="btn-primary" type="button" onClick={() => void save()} disabled={busy || testing || !model}>{busy ? 'Saving…' : 'Save'}</button><button className="btn-secondary" type="button" onClick={() => void testConnection()} disabled={busy || testing || !model}>{testing ? 'Testing…' : 'Test connection'}</button>{dedicated && <button className="btn-secondary" type="button" onClick={() => void clearDedicatedKey()} disabled={busy || testing}>Use Chat key</button>}<button className="btn-secondary" type="button" onClick={() => void reset()} disabled={busy || testing}>Reset</button></div>
       <p className="settings-help">Credential: <strong>{effective ? (dedicated ? 'dedicated secure key' : 'Chat secure key') : 'none'}</strong>. Endpoint is selected by the model. Test checks hosted reachability or self-hosted NIM readiness; it does not run generation.</p>
       {(error || message) && <div className={error ? 'settings-feedback error' : 'settings-feedback success'} role="status">{error || message}</div>}
     </section>
@@ -138,7 +156,21 @@ function SpeechProfileEditor({ kind, profile, onReload }: Props) {
   const [dedicated, setDedicated] = useState(false); const [effective, setEffective] = useState(false);
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState<string | null>(null); const [error, setError] = useState<string | null>(null);
   useEffect(() => { setBaseUrl(profile.baseUrl); setModel(profile.model); setVoice(profile.voice || defaults.voice || ''); setApiKey(''); void getMediaProviderKeyStatus(kind).then((s) => { setDedicated(s.dedicated); setEffective(s.effective); }); }, [kind, profile, defaults.voice]);
-  const save = async () => { setBusy(true); setError(null); setMessage(null); try { await saveMediaProviderConfig(kind, { apiKey, baseUrl, model, voice }); await onReload(); setApiKey(''); setMessage('Voice profile saved.'); } catch (err) { setError(err instanceof Error ? err.message : 'Could not save voice profile'); } finally { setBusy(false); } };
+  const clearDedicatedKey = async () => {
+    setBusy(true); setError(null); setMessage(null);
+    try {
+      await saveMediaProviderConfig(kind, { apiKey: null, baseUrl, model, voice });
+      await onReload();
+      setApiKey('');
+      setMessage('Dedicated key removed. The profile will reuse the Chat key when available.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not clear dedicated key');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const save = async () => { setBusy(true); setError(null); setMessage(null); try { await saveMediaProviderConfig(kind, { apiKey: apiKey.trim() ? apiKey : undefined, baseUrl, model, voice }); await onReload(); setApiKey(''); setMessage('Voice profile saved.'); } catch (err) { setError(err instanceof Error ? err.message : 'Could not save voice profile'); } finally { setBusy(false); } };
   return (
     <section className="media-provider-card compact">
       <div className="settings-card-title-row"><div><span className="settings-kicker">{kind.toUpperCase()}</span><h3>{kind === 'asr' ? 'Speech to text' : 'Text to speech'}</h3></div><span className={'settings-status-pill ' + (effective ? 'ok' : 'neutral')}>{dedicated ? 'Dedicated key' : effective ? 'Chat key' : 'No key'}</span></div>
@@ -147,7 +179,7 @@ function SpeechProfileEditor({ kind, profile, onReload }: Props) {
       <label className="settings-field"><span>Model ID</span><input value={model} onChange={(event) => setModel(event.target.value)} placeholder={defaults.model} disabled={busy} /></label>
       {kind === 'tts' && <label className="settings-field"><span>Voice</span><input value={voice} onChange={(event) => setVoice(event.target.value)} placeholder="Magpie-Multilingual.EN-US.Aria" disabled={busy} /></label>}
       <label className="settings-field"><span>Dedicated NVIDIA API key <em>optional</em></span><input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={dedicated ? 'Enter a new key' : 'Leave blank to reuse Chat key'} disabled={busy} /></label>
-      <div className="settings-actions"><button className="btn-primary" onClick={() => void save()} disabled={busy || !model}>{busy ? 'Saving…' : 'Save'}</button></div>
+      <div className="settings-actions"><button className="btn-primary" onClick={() => void save()} disabled={busy || !model}>{busy ? 'Saving…' : 'Save'}</button>{dedicated && <button className="btn-secondary" onClick={() => void clearDedicatedKey()} disabled={busy}>Use Chat key</button>}</div>
       <p className="settings-help">Credential: <strong>{effective ? (dedicated ? 'dedicated secure key' : 'Chat secure key') : 'none'}</strong>.</p>
       {(error || message) && <div className={error ? 'settings-feedback error' : 'settings-feedback success'} role="status">{error || message}</div>}
     </section>
