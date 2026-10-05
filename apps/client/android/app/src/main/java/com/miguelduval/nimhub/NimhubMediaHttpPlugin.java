@@ -52,6 +52,46 @@ public class NimhubMediaHttpPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void getBinary(PluginCall call) {
+        String urlValue = call.getString("url");
+        String apiKey = call.getString("apiKey");
+        int connectTimeout = call.getInt("connectTimeout", 30000);
+        int readTimeout = call.getInt("readTimeout", 120000);
+
+        if (urlValue == null || urlValue.isEmpty()) {
+            call.reject("url is required");
+            return;
+        }
+
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL(urlValue).openConnection();
+            connection.setRequestMethod("GET");
+            connection.setDoInput(true);
+            connection.setConnectTimeout(connectTimeout);
+            connection.setReadTimeout(readTimeout);
+            if (apiKey != null && !apiKey.isEmpty()) {
+                connection.setRequestProperty("Authorization", "Bearer " + apiKey);
+            }
+            connection.setRequestProperty("Accept", "*/*");
+
+            int status = connection.getResponseCode();
+            InputStream input = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+            byte[] bytes = input == null ? new byte[0] : readAll(input);
+
+            JSObject result = new JSObject();
+            result.put("status", status);
+            result.put("contentType", connection.getContentType() == null ? "" : connection.getContentType());
+            result.put("data_base64", Base64.encodeToString(bytes, Base64.NO_WRAP));
+            call.resolve(result);
+        } catch (Exception e) {
+            call.reject("Native binary GET failed");
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    @PluginMethod
     public void postMultipart(PluginCall call) {
         String urlValue = call.getString("url");
         String apiKey = call.getString("apiKey");
