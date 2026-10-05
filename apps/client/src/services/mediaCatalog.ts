@@ -7,6 +7,7 @@ export type MediaFunction = 'image-generation' | 'image-editing' | 'video-genera
 export type MediaTransport = 'cosmos3' | 'openai-image' | 'openai-video' | 'speech';
 export type MediaAvailability = 'hosted' | 'self-hosted';
 export type MediaProbeStrategy = 'cosmos-validation' | 'health-ready' | 'models';
+export type MediaCredentialPolicy = 'endpoint-key' | 'primary-or-dedicated';
 
 export interface MediaModelDefinition {
   id: string;
@@ -18,6 +19,7 @@ export interface MediaModelDefinition {
   defaultBaseUrl: string;
   endpoint: string;
   probeStrategy: MediaProbeStrategy;
+  credentialPolicy: MediaCredentialPolicy;
   description: string;
   credentialNote: string;
 }
@@ -33,6 +35,7 @@ export const MEDIA_MODEL_CATALOG: MediaModelDefinition[] = [
     defaultBaseUrl: 'https://ai.api.nvidia.com/v1',
     endpoint: '/cosmos/nvidia/cosmos3-nano',
     probeStrategy: 'cosmos-validation',
+    credentialPolicy: 'endpoint-key',
     description: 'Unified NVIDIA visual generator: text→image, text→video and image→video.',
     credentialNote: 'Uses the endpoint-access key issued for the hosted Cosmos3 API endpoint.',
   },
@@ -46,6 +49,7 @@ export const MEDIA_MODEL_CATALOG: MediaModelDefinition[] = [
     defaultBaseUrl: '',
     endpoint: '/images/generations',
     probeStrategy: 'health-ready',
+    credentialPolicy: 'primary-or-dedicated',
     description: 'Image generation NIM. Deploy it, then enter the invocation/base URL of that deployment.',
     credentialNote: 'Use the key and URL belonging to the target NIM deployment.'
   },
