@@ -102,7 +102,7 @@ export function getMediaProviderDefaults(kind: MediaProviderKind): StoredProfile
 
 export async function saveMediaProviderConfig(
   kind: MediaProviderKind,
-  config: { apiKey: string; baseUrl: string; model: string; voice?: string },
+  config: { apiKey?: string | null; baseUrl: string; model: string; voice?: string },
 ): Promise<void> {
   assertNative();
   const model = config.model.trim();
@@ -110,12 +110,13 @@ export async function saveMediaProviderConfig(
 
   const baseUrl = config.baseUrl.trim();
   const normalizedBaseUrl = baseUrl ? normalizeNvidiaBaseUrl(baseUrl) : '';
-  const normalizedKey = config.apiKey.trim();
-
-  if (normalizedKey) {
-    await secureSet(KEY_STORAGE[kind], normalizeNvidiaApiKey(normalizedKey));
-  } else {
-    await secureRemove(KEY_STORAGE[kind]);
+  if (config.apiKey !== undefined) {
+    const normalizedKey = config.apiKey?.trim() ?? '';
+    if (normalizedKey) {
+      await secureSet(KEY_STORAGE[kind], normalizeNvidiaApiKey(normalizedKey));
+    } else {
+      await secureRemove(KEY_STORAGE[kind]);
+    }
   }
 
   const payload: StoredProfile = {
