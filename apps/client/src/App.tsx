@@ -19,6 +19,7 @@ import { Composer } from './components/Composer';
 import { AgentApprovalCard } from './components/AgentApprovalCard';
 import { SettingsScreen } from './components/SettingsScreen';
 import { MediaStudio, type MediaMode } from './components/MediaStudio';
+import { ArtifactLibrary } from './components/ArtifactLibrary';
 import './styles.css';
 
 function storedToChatMessage(msg: StoredMessage): ChatMessage {
@@ -90,7 +91,7 @@ export default function App() {
   const [agentMode, setAgentMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showAgentInfo, setShowAgentInfo] = useState(false);
-  const [workspaceMode, setWorkspaceMode] = useState<MediaMode | 'chat'>('chat');
+  const [workspaceMode, setWorkspaceMode] = useState<MediaMode | 'chat' | 'library'>('chat');
   const currentConversationRef = useRef(currentConversation);
   const messagesAreaRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
@@ -327,7 +328,7 @@ export default function App() {
     ],
   );
 
-  const handleWorkspaceModeChange = useCallback((mode: MediaMode | 'chat') => {
+  const handleWorkspaceModeChange = useCallback((mode: MediaMode | 'chat' | 'library') => {
     if (effectiveBusy) return;
     if (mode !== 'chat' && agentMode) {
       setAgentMode(false);
@@ -484,7 +485,7 @@ export default function App() {
         </div>
         <div className="topbar-center">
           <div className="workstation-mode-buttons" aria-label="Workspace mode">
-            {(['chat', 'image', 'voice', 'video'] as const).map((mode) => (
+            {(['chat', 'image', 'voice', 'video', 'library'] as const).map((mode) => (
               <button
                 key={mode}
                 type="button"
@@ -492,7 +493,7 @@ export default function App() {
                 onClick={() => handleWorkspaceModeChange(mode)}
                 disabled={effectiveBusy}
               >
-                {mode === 'chat' ? 'Chat' : mode === 'image' ? 'Image' : mode === 'voice' ? 'Voice' : 'Video'}
+                {mode === 'chat' ? 'Chat' : mode === 'image' ? 'Image' : mode === 'voice' ? 'Voice' : mode === 'video' ? 'Video' : 'Library'}
               </button>
             ))}
           </div>
@@ -746,6 +747,8 @@ export default function App() {
               }
             />
           </div>
+          ) : workspaceMode === 'library' ? (
+            <ArtifactLibrary />
           ) : (
             <MediaStudio
               mode={workspaceMode}
