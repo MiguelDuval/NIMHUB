@@ -66,7 +66,7 @@ export const MEDIA_MODEL_CATALOG: MediaModelDefinition[] = [
     availability: 'self-hosted',
     defaultBaseUrl: '',
     endpoint: '/videos/generations',
-    description: 'NVIDIA Visual GenAI video NIM for text→video and image→video.',
+    description: 'NVIDIA Visual GenAI video NIM. NIM Hub uses its job-based video lifecycle for text→video and image→video.',
     credentialNote: 'Use the invocation/base URL of the deployed Wan2.2 NIM.',
   },
 ];
