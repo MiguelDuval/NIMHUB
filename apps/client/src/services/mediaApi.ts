@@ -133,6 +133,15 @@ async function nativeJsonGet<T>(url: string, apiKey: string | null, timeout: num
   return data as T;
 }
 
+function apiKeyForOrigin(url: string, configuredBaseUrl: string, apiKey: string | null): string | null {
+  if (!apiKey) return null;
+  try {
+    return new URL(url).origin === new URL(configuredBaseUrl).origin ? apiKey : null;
+  } catch {
+    return null;
+  }
+}
+
 async function nativeBinaryGet(
   url: string,
   apiKey: string | null,
@@ -524,7 +533,11 @@ export async function generateVideo(
     }
     const legacyUrl = Array.isArray(legacy.data) ? legacy.data[0]?.url : legacy.data?.url;
     if (legacyUrl && /^https?:/i.test(legacyUrl)) {
-      const content = await nativeBinaryGet(legacyUrl, profile.apiKey, 300000);
+      const content = await nativeBinaryGet(
+        legacyUrl,
+        apiKeyForOrigin(legacyUrl, profile.baseUrl, profile.apiKey),
+        300000,
+      );
       onProgress?.({ phase: 'completed', progress: 100 });
       return {
         created: legacy.created,
@@ -620,7 +633,11 @@ export async function generateVideo(
 
   const directUrl = Array.isArray(created.data) ? created.data[0]?.url : created.data?.url;
   if (directUrl && /^https?:/i.test(directUrl)) {
-    const content = await nativeBinaryGet(directUrl, profile.apiKey, 300000);
+    const content = await nativeBinaryGet(
+      directUrl,
+      apiKeyForOrigin(directUrl, profile.baseUrl, profile.apiKey),
+      300000,
+    );
     onProgress?.({ phase: 'completed', progress: 100 });
     return {
       created: created.created,
