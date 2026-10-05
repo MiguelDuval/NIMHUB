@@ -5,6 +5,7 @@ import {
   type MediaProviderKind, type MediaProviderConfig,
 } from '../services/mediaConfig';
 import { getMediaModelDefinition, getMediaModelsForKind } from '../services/mediaCatalog';
+import { testMediaProvider } from '../services/mediaApi';
 
 interface Props { kind: MediaProviderKind; profile: MediaProviderConfig; onReload: () => Promise<void>; }
 
@@ -16,6 +17,7 @@ function VisualProfileEditor({ kind, profile, onReload }: Props) {
   const [dedicated, setDedicated] = useState(false);
   const [effective, setEffective] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +53,18 @@ function VisualProfileEditor({ kind, profile, onReload }: Props) {
       setMessage('Profile saved. Credentials remain in Android secure storage.');
     } catch (err) { setError(err instanceof Error ? err.message : 'Could not save media profile'); }
     finally { setBusy(false); }
+  };
+
+  const testConnection = async () => {
+    setTesting(true); setError(null); setMessage(null);
+    try {
+      const result = await testMediaProvider(kind);
+      setMessage(result.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Media endpoint test failed');
+    } finally {
+      setTesting(false);
+    }
   };
 
   const useChatKey = async () => {
@@ -106,8 +120,8 @@ function VisualProfileEditor({ kind, profile, onReload }: Props) {
           : 'This is not a model name. It is the URL where your deployed NIM is running.'}
       </p>
       <label className="settings-field"><span>Dedicated NVIDIA API key <em>optional</em></span><input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="off" placeholder={dedicated ? 'Enter a new key to replace it' : 'Leave blank to reuse Chat key'} disabled={busy} /></label>
-      <div className="settings-actions"><button className="btn-primary" type="button" onClick={() => void save()} disabled={busy || !model}>{busy ? 'Saving…' : 'Save'}</button>{dedicated && <button className="btn-secondary" type="button" onClick={() => void useChatKey()} disabled={busy}>Use Chat key</button>}<button className="btn-secondary" type="button" onClick={() => void reset()} disabled={busy}>Reset</button></div>
-      <p className="settings-help">Credential: <strong>{effective ? (dedicated ? 'dedicated secure key' : 'Chat secure key') : 'none'}</strong>. Endpoint is selected by the model.</p>
+      <div className="settings-actions"><button className="btn-primary" type="button" onClick={() => void save()} disabled={busy || testing || !model}>{busy ? 'Saving…' : 'Save'}</button><button className="btn-secondary" type="button" onClick={() => void testConnection()} disabled={busy || testing || !model}>{testing ? 'Testing…' : 'Test connection'}</button>{dedicated && <button className="btn-secondary" type="button" onClick={() => void useChatKey()} disabled={busy || testing}>Use Chat key</button>}<button className="btn-secondary" type="button" onClick={() => void reset()} disabled={busy || testing}>Reset</button></div>
+      <p className="settings-help">Credential: <strong>{effective ? (dedicated ? 'dedicated secure key' : 'Chat secure key') : 'none'}</strong>. Endpoint is selected by the model. Test checks hosted reachability or self-hosted NIM readiness; it does not run generation.</p>
       {(error || message) && <div className={error ? 'settings-feedback error' : 'settings-feedback success'} role="status">{error || message}</div>}
     </section>
   );
