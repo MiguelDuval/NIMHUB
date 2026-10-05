@@ -197,8 +197,7 @@ function base64ToBlob(data: string, mimeType: string): Blob {
   return new Blob([output], { type: mimeType });
 }
 
-function parseMultipartPayload(response: NativeMultipartResponse): unknown {
-  const bytes = atob(response.data_base64);
+function parseMultipartPayload(response: NativeMultipartResponse): unknown {  const bytes = atob(response.data_base64);
   const output = new Uint8Array(bytes.length);
   for (let i = 0; i < bytes.length; i += 1) output[i] = bytes.charCodeAt(i);
   const text = new TextDecoder().decode(output);
@@ -311,7 +310,7 @@ export async function generateImage(request: ImageGenerationRequest): Promise<Im
   const model = getMediaModelDefinition(profile.model || request.model);
   if (model?.availability === 'hosted' && !profile.apiKey) {
     throw new APIError(
-      'The selected hosted media endpoint needs an NVIDIA endpoint-access key. Add a dedicated media key or configure the Chat key.',
+      'The selected hosted media endpoint needs an NVIDIA endpoint-access key. Add the endpoint-access key issued for the selected hosted model.',
       'MEDIA_NOT_CONFIGURED',
       503,
       false,
@@ -397,8 +396,7 @@ export async function transcribeAudio(
       ...(options?.language ? { language: options.language } : {}),
       word_time_offsets: String(options?.wordTimeOffsets ?? false),
     },
-    fileBase64: await blobToBase64(audio),
-    fileName: options?.fileName ?? 'recording.webm',
+    fileBase64: await blobToBase64(audio),    fileName: options?.fileName ?? 'recording.webm',
     fileMimeType: audio.type || 'audio/webm',
     connectTimeout: 30000,
     readTimeout: 120000,
@@ -597,8 +595,7 @@ export async function generateVideo(
       else if (['in_progress', 'running', 'processing'].includes(status)) onProgress?.({ phase: 'rendering', progress });
       if (['failed', 'cancelled', 'canceled', 'error'].includes(status)) {
         const detail = latest.error;
-        const message = typeof detail === 'string'
-          ? detail
+        const message = typeof detail === 'string'          ? detail
           : detail?.message || `Video job ${status}`;
         throw new APIError(
           message,
