@@ -43,7 +43,7 @@ export function NvidiaInstructions({ open, onClose }: Props) {
             <strong>Video</strong>
             <div className="instructions-model"><b>Cosmos3 Nano</b><span>Hosted · text→video / image→video</span></div>
             <div className="instructions-model"><b>Wan2.2</b><span>Self-hosted NIM · text→video / image→video</span></div>
-            <p>Wan2.2 needs the invocation/base URL of its deployment. It must not be paired with the generic Chat URL. A local NIM can be keyless unless your own gateway adds authentication.</p>
+            <p>Wan2.2 needs the invocation/base URL of its deployment. Text→video and image→video are deployment variants (`NIM_MODEL_VARIANT=t2v` or `i2v`). NIM Hub creates the video job, polls it, and downloads the finished content. A local NIM can be keyless unless your own gateway adds authentication.</p>
           </section>
           <section className="instructions-card">
             <strong>Agent / MCP</strong>
