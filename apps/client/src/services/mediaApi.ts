@@ -151,9 +151,18 @@ export interface MediaProviderProbe {
   target: string;
 }
 
-export async function testMediaProvider(kind: MediaProviderKind): Promise<MediaProviderProbe> {
+export async function testMediaProvider(
+  kind: MediaProviderKind,
+  overrides?: { baseUrl?: string; model?: string; apiKey?: string | null },
+): Promise<MediaProviderProbe> {
   assertNative();
-  const profile = await getMediaProviderConfig(kind);
+  const stored = await getMediaProviderConfig(kind);
+  const profile = {
+    ...stored,
+    baseUrl: overrides?.baseUrl?.trim() || stored.baseUrl,
+    model: overrides?.model?.trim() || stored.model,
+    apiKey: overrides && 'apiKey' in overrides ? (overrides.apiKey?.trim() || null) : stored.apiKey,
+  };
   if (!profile.baseUrl) {
     throw new APIError(
       `No API base URL configured for ${kind.toUpperCase()}.`,
