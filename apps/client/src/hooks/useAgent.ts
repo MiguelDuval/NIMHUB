@@ -92,7 +92,6 @@ export function useAgent({
       if (delta.length > 0) await onMessages?.(delta);
 
       setStreamingText('');
-      setActivities([]);
       setApprovals(response.approvals);
       if (response.status === 'completed') {
         setStatus('success');
