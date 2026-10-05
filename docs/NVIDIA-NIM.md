@@ -25,7 +25,7 @@ The Android client must not treat every discovered model as Chat. When provider 
 Visual GenAI documents OpenAI-compatible image generation/editing. NIM Hub uses /v1/images/generations for generation and /v1/images/edits with native Android multipart transport for editing. Responses request base64 output so images can be persisted as local artifacts.
 
 ## Video
-Visual GenAI provides OpenAI-compatible video generation. NIM Hub uses /v1/videos/generations with a longer request timeout and persists returned base64 video as a local artifact.
+Visual GenAI video deployments expose an OpenAI-compatible job workflow. NIM Hub uses `/v1/videos` for current self-hosted video jobs, polls `/v1/videos/{id}` until completion, then downloads `/v1/videos/{id}/content`. It keeps `/v1/videos/generations` as a compatibility fallback for older synchronous deployments and persists the finished MP4 as a local artifact.
 
 ## Speech
 Speech NIM exposes multipart ASR at /v1/audio/transcriptions and TTS synthesis at /v1/audio/synthesize. NIM Hub sends microphone/audio payloads through a small Android-native multipart plugin so speech requests do not depend on browser CORS or WebView multipart behavior.
