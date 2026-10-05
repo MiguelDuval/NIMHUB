@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { getNvidiaApiKey, normalizeNvidiaBaseUrl, normalizeNvidiaApiKey } from './nvidiaConfig';
 import { secureGet, secureRemove, secureSet } from './secureStorage';
+import { getMediaModelDefinition } from './mediaCatalog';
 
 export type MediaProviderKind = 'image' | 'video' | 'asr' | 'tts';
 
@@ -89,10 +90,13 @@ export async function getMediaProviderConfig(kind: MediaProviderKind): Promise<M
   const meta = readMeta(kind);
   const dedicatedKey = await readDedicatedKey(kind);
   const chatKey = await getNvidiaApiKey();
+  const model = getMediaModelDefinition(meta.model);
+  const mayReusePrimaryKey = model?.credentialPolicy !== 'endpoint-key';
+  const effectiveChatKey = mayReusePrimaryKey ? chatKey : null;
   return {
     ...meta,
-    apiKey: dedicatedKey ?? chatKey,
-    usesChatKey: !dedicatedKey && Boolean(chatKey),
+    apiKey: dedicatedKey ?? effectiveChatKey,
+    usesChatKey: !dedicatedKey && Boolean(effectiveChatKey),
   };
 }
 
