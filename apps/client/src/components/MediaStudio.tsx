@@ -162,6 +162,16 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
     finally { setBusy(false); }
   };
 
+  const handleReferenceImageChange = async (file: File | null) => {
+    setReferenceImage(file);
+    if (!file || !visualKind || visualKind !== 'image') return;
+
+    const editingModel = mediaModels.find((item) => item.functions.includes('image-editing'));
+    if (editingModel && !selectedMediaModel?.functions.includes('image-editing')) {
+      await handleMediaModelChange(editingModel.id);
+    }
+  };
+
   const runImageEdit = async () => {
     if (!prompt.trim() || !referenceImage) return;
     if (!visualProviderReady) { onOpenSettings(); return; }
@@ -261,7 +271,7 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
       <section className="media-model-card"><label className="settings-field"><span>Model</span><select value={mediaModelId} onChange={(event) => void handleMediaModelChange(event.target.value)} disabled={busy}>{mediaModels.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.availability === "hosted" ? "Hosted" : "Self-hosted"}</option>)}</select></label>{selectedMediaModel && <div className="media-model-explainer"><strong>{selectedMediaModel.name}</strong><span>{selectedMediaModel.description}</span><span>Route: <code>{selectedMediaModel.defaultBaseUrl || "configure in Settings"}</code>{selectedMediaModel.endpoint}</span></div>}</section><label className="media-prompt-field"><span>Prompt</span><textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the image…" disabled={busy} /></label>
       <div className="media-control-grid">
         <label className="settings-field"><span>Size</span><select value={imageSize} onChange={(e) => setImageSize(e.target.value)} disabled={busy}><option>1024x1024</option><option>832x480</option><option>1280x720</option></select></label>
-        <label className="settings-field"><span>Reference image for editing</span><input type="file" accept="image/*" onChange={(e) => setReferenceImage(e.target.files?.[0] ?? null)} disabled={busy} /></label>
+        <label className="settings-field"><span>Reference image for editing</span><input type="file" accept="image/*" onChange={(e) => void handleReferenceImageChange(e.target.files?.[0] ?? null)} disabled={busy} /></label>
       </div>
       <div className="media-action-row">
         <button className="btn-primary" onClick={() => void runImageGenerate()} disabled={busy || !prompt.trim() || !visualProviderReady || !selectedMediaModel?.functions.includes('image-generation')}>Generate image</button>
