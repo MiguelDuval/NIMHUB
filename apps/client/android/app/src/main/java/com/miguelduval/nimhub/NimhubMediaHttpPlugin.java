@@ -63,8 +63,8 @@ public class NimhubMediaHttpPlugin extends Plugin {
         int connectTimeout = call.getInt("connectTimeout", 30000);
         int readTimeout = call.getInt("readTimeout", 120000);
 
-        if (urlValue == null || urlValue.isEmpty() || apiKey == null || apiKey.isEmpty()) {
-            call.reject("url and apiKey are required");
+        if (urlValue == null || urlValue.isEmpty()) {
+            call.reject("url is required");
             return;
         }
 
@@ -77,7 +77,9 @@ public class NimhubMediaHttpPlugin extends Plugin {
             connection.setDoInput(true);
             connection.setConnectTimeout(connectTimeout);
             connection.setReadTimeout(readTimeout);
-            connection.setRequestProperty("Authorization", "Bearer " + apiKey);
+            if (apiKey != null && !apiKey.isEmpty()) {
+                connection.setRequestProperty("Authorization", "Bearer " + apiKey);
+            }
             connection.setRequestProperty("Accept", "*/*");
             connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
 
