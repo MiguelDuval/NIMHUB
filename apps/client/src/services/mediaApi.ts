@@ -18,7 +18,7 @@ import { normalizeNvidiaApiKey } from './nvidiaConfig';
 interface NimhubMediaHttpPlugin {
   postMultipart(options: {
     url: string;
-    apiKey: string;
+    apiKey?: string;
     fields?: Record<string, string>;
     fileBase64?: string;
     fileFieldName?: string;
@@ -201,10 +201,10 @@ export async function generateImage(request: ImageGenerationRequest): Promise<Im
 
 export async function editImage(request: ImageEditRequest): Promise<ImageEditResponse> {
   assertNative();
-  const profile = await requireProfile('image');
+  const profile = await requireProfile('image' , { allowKeyless: true });
   const response = await NativeMediaHttp.postMultipart({
     url: joinEndpoint(profile.baseUrl, '/images/edits'),
-    apiKey: profile.apiKey!,
+    apiKey: profile.apiKey,
     fields: {
       model: profile.model || request.model,
       prompt: request.prompt,
@@ -227,7 +227,7 @@ export async function transcribeAudio(
   options?: { language?: string; wordTimeOffsets?: boolean; fileName?: string },
 ): Promise<string> {
   assertNative();
-  const profile = await requireProfile('asr');
+  const profile = await requireProfile('asr' , { allowKeyless: true });
   const response = await NativeMediaHttp.postMultipart({
     url: joinEndpoint(profile.baseUrl, '/audio/transcriptions'),
     apiKey: profile.apiKey!,
@@ -256,7 +256,7 @@ export async function synthesizeSpeech(
   options?: Partial<TTSRequest>,
 ): Promise<{ audio: Blob; contentType: string }> {
   assertNative();
-  const profile = await requireProfile('tts');
+  const profile = await requireProfile('tts' , { allowKeyless: true });
   const response = await NativeMediaHttp.postMultipart({
     url: joinEndpoint(profile.baseUrl, '/audio/synthesize'),
     apiKey: profile.apiKey!,
