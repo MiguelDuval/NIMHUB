@@ -17,7 +17,7 @@ function assertNative(): void {
 }
 
 function joinEndpoint(baseUrl: string, path: string): string {
-  return baseUrl.replace(/\\/+$/, '') + '/' + path.replace(/^\\/+/, '');
+  return baseUrl.replace(/\/+$/, '') + '/' + path.replace(/^\/+/, '');
 }
 
 function readErrorMessage(data: unknown, fallback: string): string {
