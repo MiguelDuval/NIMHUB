@@ -87,7 +87,24 @@ function VisualProfileEditor({ kind, profile, onReload }: Props) {
         </select>
       </label>
       {selected && <div className="media-model-explainer"><strong>{selected.name}</strong><span>{selected.description}</span><span>{selected.availability === 'hosted' ? 'Endpoint' : 'NIM endpoint'}: <code>{selected.defaultBaseUrl || 'configure below'}</code>{selected.endpoint}</span></div>}
-      <label className="settings-field"><span>{selected?.availability === 'hosted' ? 'Endpoint base URL' : 'NIM invocation / base URL'}</span><input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} autoCapitalize="none" autoCorrect="off" spellCheck={false} inputMode="url" placeholder={selected?.defaultBaseUrl || 'https://<your-nim-host>/v1'} disabled={busy} /></label>
+      <label className="settings-field">
+        <span>{selected?.availability === 'hosted' ? 'NVIDIA hosted endpoint' : 'NIM invocation / base URL'}</span>
+        <input
+          value={baseUrl}
+          onChange={(event) => setBaseUrl(event.target.value)}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          inputMode="url"
+          placeholder={selected?.defaultBaseUrl || 'https://<your-nim-host>/v1'}
+          disabled={busy || selected?.availability === 'hosted'}
+        />
+      </label>
+      <p className="settings-help">
+        {selected?.availability === 'hosted'
+          ? 'Managed by NVIDIA for this hosted API. You normally do not change this URL.'
+          : 'This is not a model name. It is the URL where your deployed NIM is running.'}
+      </p>
       <label className="settings-field"><span>Dedicated NVIDIA API key <em>optional</em></span><input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="off" placeholder={dedicated ? 'Enter a new key to replace it' : 'Leave blank to reuse Chat key'} disabled={busy} /></label>
       <div className="settings-actions"><button className="btn-primary" type="button" onClick={() => void save()} disabled={busy || !model}>{busy ? 'Saving…' : 'Save'}</button>{dedicated && <button className="btn-secondary" type="button" onClick={() => void useChatKey()} disabled={busy}>Use Chat key</button>}<button className="btn-secondary" type="button" onClick={() => void reset()} disabled={busy}>Reset</button></div>
       <p className="settings-help">Credential: <strong>{effective ? (dedicated ? 'dedicated secure key' : 'Chat secure key') : 'none'}</strong>. Endpoint is selected by the model.</p>
