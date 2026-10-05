@@ -402,7 +402,7 @@ export async function synthesizeSpeech(
   const profile = await requireProfile('tts', { allowKeyless: true });
   const response = await NativeMediaHttp.postMultipart({
     url: joinEndpoint(profile.baseUrl, '/audio/synthesize'),
-    apiKey: profile.apiKey!,
+    apiKey: profile.apiKey,
     fields: {
       language: options?.language ?? 'en-US',
       text: text.trim(),
@@ -525,6 +525,7 @@ export async function generateVideo(
     const legacyUrl = Array.isArray(legacy.data) ? legacy.data[0]?.url : legacy.data?.url;
     if (legacyUrl && /^https?:/i.test(legacyUrl)) {
       const content = await nativeBinaryGet(legacyUrl, profile.apiKey, 300000);
+      onProgress?.({ phase: 'completed', progress: 100 });
       return {
         created: legacy.created,
         status: 'completed',
@@ -608,6 +609,7 @@ export async function generateVideo(
       profile.apiKey,
       300000,
     );
+    onProgress?.({ phase: 'completed', progress: 100 });
     return {
       created: created.created,
       id: jobId,
@@ -619,6 +621,7 @@ export async function generateVideo(
   const directUrl = Array.isArray(created.data) ? created.data[0]?.url : created.data?.url;
   if (directUrl && /^https?:/i.test(directUrl)) {
     const content = await nativeBinaryGet(directUrl, profile.apiKey, 300000);
+    onProgress?.({ phase: 'completed', progress: 100 });
     return {
       created: created.created,
       status: 'completed',
