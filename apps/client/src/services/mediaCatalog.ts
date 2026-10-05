@@ -42,8 +42,8 @@ export const MEDIA_MODEL_CATALOG: MediaModelDefinition[] = [
     availability: 'self-hosted',
     defaultBaseUrl: '',
     endpoint: '/images/generations',
-    description: 'Image generation NIM. Enter the invocation/base URL of your deployment.',
-    credentialNote: 'Use the key and URL belonging to the target NIM deployment.',
+    description: 'Image generation NIM. Deploy it, then enter the invocation/base URL of that deployment.',
+    credentialNote: 'Use the key and URL belonging to the target NIM deployment.'
   },
   {
     id: 'qwen/qwen-image-edit-2511',
@@ -54,7 +54,7 @@ export const MEDIA_MODEL_CATALOG: MediaModelDefinition[] = [
     availability: 'self-hosted',
     defaultBaseUrl: '',
     endpoint: '/images/edits',
-    description: 'Image editing NIM for reference-image workflows.',
+    description: 'Image editing NIM for reference-image workflows. Use the deployed Qwen Image Edit variant.',
     credentialNote: 'Use the key and URL belonging to the target NIM deployment.',
   },
   {
