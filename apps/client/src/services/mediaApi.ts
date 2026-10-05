@@ -64,12 +64,12 @@ async function requireProfile(kind: MediaProviderKind) {
   return profile;
 }
 
-async function nativeJsonPost<T>(url: string, apiKey: string, body: unknown, timeout: number): Promise<T> {
+async function nativeJsonPost<T>(url: string, apiKey: string | null, body: unknown, timeout: number): Promise<T> {
   const response = await CapacitorHttp.request({
     url,
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${normalizeNvidiaApiKey(apiKey)}`,
+      ...(apiKey ? { Authorization: `Bearer ${normalizeNvidiaApiKey(apiKey)}` } : {}),
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
@@ -146,8 +146,17 @@ function assertSuccess(response: NativeMultipartResponse, operation: string): vo
 
 export async function generateImage(request: ImageGenerationRequest): Promise<ImageGenerationResponse> {
   assertNative();
-  const profile = await requireProfile('image');
+  const profile = await requireProfile('image', { allowKeyless: true });
   const model = getMediaModelDefinition(profile.model || request.model);
+  if (model?.availability === 'hosted' && !profile.apiKey) {
+    throw new APIError(
+      'The selected hosted media endpoint needs an NVIDIA endpoint-access key. Add a dedicated media key or configure the Chat key.',
+      'MEDIA_NOT_CONFIGURED',
+      503,
+      false,
+      'nvidia',
+    );
+  }
   if (!model?.functions.includes('image-generation')) {
     throw new APIError('Selected image model does not support image generation.', 'MEDIA_MODEL_UNSUPPORTED', 400, false, 'nvidia');
   }
@@ -158,7 +167,7 @@ export async function generateImage(request: ImageGenerationRequest): Promise<Im
       : '720_1_1';
     const payload = await nativeJsonPost<{ b64_image?: string }>(
       joinEndpoint(profile.baseUrl, model.endpoint),
-      profile.apiKey!,
+      profile.apiKey,
       {
         model_mode: 'text2image',
         prompt: request.prompt,
@@ -176,7 +185,7 @@ export async function generateImage(request: ImageGenerationRequest): Promise<Im
 
   return nativeJsonPost<ImageGenerationResponse>(
     joinEndpoint(profile.baseUrl, '/images/generations'),
-    profile.apiKey!,
+    profile.apiKey,
     {
       model: profile.model || request.model,
       prompt: request.prompt,
@@ -269,8 +278,17 @@ export async function synthesizeSpeech(
 
 export async function generateVideo(request: VideoGenerationRequest): Promise<VideoGenerationResponse> {
   assertNative();
-  const profile = await requireProfile('video');
+  const profile = await requireProfile('video', { allowKeyless: true });
   const model = getMediaModelDefinition(profile.model || request.model);
+  if (model?.availability === 'hosted' && !profile.apiKey) {
+    throw new APIError(
+      'The selected hosted media endpoint needs an NVIDIA endpoint-access key. Add a dedicated media key or configure the Chat key.',
+      'MEDIA_NOT_CONFIGURED',
+      503,
+      false,
+      'nvidia',
+    );
+  }
   if (!model?.functions.includes('video-generation')) {
     throw new APIError('Selected video model does not support video generation.', 'MEDIA_MODEL_UNSUPPORTED', 400, false, 'nvidia');
   }
