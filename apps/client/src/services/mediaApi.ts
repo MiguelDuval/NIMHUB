@@ -453,7 +453,7 @@ export async function generateVideo(
   const model = getMediaModelDefinition(profile.model || request.model);
   if (model?.availability === 'hosted' && !profile.apiKey) {
     throw new APIError(
-      'The selected hosted media endpoint needs an NVIDIA endpoint-access key. Add a dedicated media key or configure the Chat key.',
+      'The selected hosted media endpoint needs an NVIDIA endpoint-access key. Add the endpoint-access key issued for the selected hosted model.',
       'MEDIA_NOT_CONFIGURED',
       503,
       false,
