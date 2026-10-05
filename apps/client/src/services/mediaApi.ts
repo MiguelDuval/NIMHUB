@@ -41,21 +41,21 @@ function joinEndpoint(baseUrl: string, path: string): string {
   return baseUrl.replace(/\/+$/, '') + '/' + path.replace(/^\/+/, '');
 }
 
-async function requireProfile(kind: MediaProviderKind) {
+async function requireProfile(kind: MediaProviderKind, options?: { allowKeyless?: boolean }) {
   const profile = await getMediaProviderConfig(kind);
-  if (!profile.apiKey) {
+  if (!profile.baseUrl) {
     throw new APIError(
-      `No API key configured for ${kind.toUpperCase()}. Configure a dedicated media key or the Chat NVIDIA key.`,
-      'MEDIA_NOT_CONFIGURED',
+      `No API base URL configured for ${kind.toUpperCase()}.`,
+      'MEDIA_ENDPOINT_NOT_CONFIGURED',
       503,
       false,
       'nvidia',
     );
   }
-  if (!profile.baseUrl) {
+  if (!profile.apiKey && !options?.allowKeyless) {
     throw new APIError(
-      `No API base URL configured for ${kind.toUpperCase()}.`,
-      'MEDIA_ENDPOINT_NOT_CONFIGURED',
+      `No API key configured for ${kind.toUpperCase()}. Configure a dedicated media key or the Chat NVIDIA key.`,
+      'MEDIA_NOT_CONFIGURED',
       503,
       false,
       'nvidia',
@@ -299,7 +299,7 @@ export async function generateVideo(request: VideoGenerationRequest): Promise<Vi
     const resolution = request.size === '1280x720' ? '720_16_9' : '480_16_9';
     const payload = await nativeJsonPost<{ b64_video?: string }>(
       joinEndpoint(profile.baseUrl, model.endpoint),
-      profile.apiKey!,
+      profile.apiKey,
       {
         model_mode: modelMode,
         prompt: request.prompt,
