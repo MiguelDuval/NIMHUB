@@ -27,6 +27,12 @@ interface NimhubMediaHttpPlugin {
     connectTimeout?: number;
     readTimeout?: number;
   }): Promise<NativeMultipartResponse>;
+  getBinary(options: {
+    url: string;
+    apiKey?: string;
+    connectTimeout?: number;
+    readTimeout?: number;
+  }): Promise<NativeMultipartResponse>;
 }
 
 const NativeMediaHttp = registerPlugin<NimhubMediaHttpPlugin>('NimhubMediaHttp');
@@ -96,6 +102,62 @@ async function nativeJsonPost<T>(url: string, apiKey: string | null, body: unkno
     );
   }
   return data as T;
+}
+
+async function nativeJsonGet<T>(url: string, apiKey: string | null, timeout: number): Promise<T> {
+  const response = await CapacitorHttp.request({
+    url,
+    method: 'GET',
+    headers: {
+      ...(apiKey ? { Authorization: `Bearer ${normalizeNvidiaApiKey(apiKey)}` } : {}),
+      Accept: 'application/json',
+    },
+    connectTimeout: 15000,
+    readTimeout: timeout,
+    responseType: 'json',
+  });
+
+  const data = response.data;
+  if (response.status < 200 || response.status >= 300) {
+    const detail = typeof data === 'object' && data !== null ? data as Record<string, unknown> : {};
+    const nested = detail.error && typeof detail.error === 'object' ? detail.error as Record<string, unknown> : {};
+    const message = String(nested.message ?? detail.message ?? `NVIDIA video job request failed: HTTP ${response.status}`);
+    throw new APIError(
+      response.status === 401 || response.status === 403 ? 'NVIDIA rejected the media API key' : message,
+      response.status === 429 ? 'NVIDIA_RATE_LIMITED' : 'NVIDIA_MEDIA_REQUEST_FAILED',
+      response.status,
+      response.status === 429 || response.status >= 500,
+      'nvidia',
+    );
+  }
+  return data as T;
+}
+
+async function nativeBinaryGet(
+  url: string,
+  apiKey: string | null,
+  timeout: number,
+): Promise<NativeMultipartResponse> {
+  const response = await NativeMediaHttp.getBinary({
+    url,
+    ...(apiKey ? { apiKey } : {}),
+    connectTimeout: 15000,
+    readTimeout: timeout,
+  });
+  if (response.status < 200 || response.status >= 300) {
+    const payload = parseMultipartPayload(response);
+    const detail = typeof payload === 'object' && payload !== null ? payload as Record<string, unknown> : {};
+    const nested = detail.error && typeof detail.error === 'object' ? detail.error as Record<string, unknown> : {};
+    const message = String(nested.message ?? detail.message ?? `Media content download failed: HTTP ${response.status}`);
+    throw new APIError(
+      response.status === 401 || response.status === 403 ? 'Media content endpoint rejected the configured API key' : message,
+      response.status === 429 ? 'NVIDIA_RATE_LIMITED' : 'MEDIA_DOWNLOAD_FAILED',
+      response.status,
+      response.status === 429 || response.status >= 500,
+      'nvidia',
+    );
+  }
+  return response;
 }
 
 function blobToBase64(blob: Blob): Promise<string> {
@@ -398,16 +460,149 @@ export async function generateVideo(request: VideoGenerationRequest): Promise<Vi
     return { created: Math.floor(Date.now() / 1000), status: 'completed', data: { b64_json: payload.b64_video } };
   }
 
-  return nativeJsonPost<VideoGenerationResponse>(
-    joinEndpoint(profile.baseUrl, '/videos/generations'),
-    profile.apiKey!,
-    {
-      model: profile.model || request.model,
-      prompt: request.prompt,
-      size: request.size ?? '832x480',
-      seconds: request.seconds ?? 4,
-      ...(request.input_reference ? { input_reference: request.input_reference } : {}),
+  const seconds = request.seconds ?? 4;
+  const numFrames = Math.max(25, Math.min(197, Math.round(seconds * 24)));
+  const createUrl = joinEndpoint(profile.baseUrl, '/videos');
+  const basePayload = {
+    model: profile.model || request.model,
+    prompt: request.prompt,
+    size: request.size ?? '832x480',
+    seconds,
+    response_format: 'url',
+    ...(request.input_reference ? { input_reference: request.input_reference } : {}),
+    nvext: {
+      fps: 24,
+      num_frames: numFrames,
+      num_inference_steps: 50,
+      ...(request.input_reference ? {
+        guidance_scale: 1,
+        boundary_ratio: 0.875,
+        guidance_scale_2: 1,
+      } : {}),
     },
-    300000,
+  };
+
+  let created: VideoGenerationResponse;
+  try {
+    created = await nativeJsonPost<VideoGenerationResponse>(
+      createUrl,
+      profile.apiKey,
+      basePayload,
+      30000,
+    );
+  } catch (err) {
+    // Older VisualGen deployments exposed the synchronous endpoint as the
+    // /videos/generations alias. Keep a compatibility fallback, but prefer the
+    // current job-based /videos lifecycle.
+    if (!(err instanceof APIError) || ![404, 405].includes(err.status)) throw err;
+
+    const legacy = await nativeJsonPost<VideoGenerationResponse>(
+      joinEndpoint(profile.baseUrl, '/videos/generations'),
+      profile.apiKey,
+      {
+        ...basePayload,
+        response_format: 'b64_json',
+      },
+      300000,
+    );
+    const legacyBase64 = firstBase64Video(legacy);
+    if (legacyBase64) {
+      return { ...legacy, status: 'completed', data: { b64_json: legacyBase64 } };
+    }
+    const legacyUrl = Array.isArray(legacy.data) ? legacy.data[0]?.url : legacy.data?.url;
+    if (legacyUrl && /^https?:/i.test(legacyUrl)) {
+      const content = await nativeBinaryGet(legacyUrl, profile.apiKey, 300000);
+      return {
+        created: legacy.created,
+        status: 'completed',
+        data: { b64_json: content.data_base64 },
+      };
+    }
+    throw new APIError(
+      'Legacy video endpoint returned no downloadable video.',
+      'MEDIA_EMPTY_RESULT',
+      502,
+      false,
+      'nvidia',
+    );
+  }
+
+  const initialStatus = String(created.status ?? '').toLowerCase();
+  const jobId = created.id;
+  if (jobId && ['queued', 'in_progress', 'running', 'processing'].includes(initialStatus)) {
+    const deadline = Date.now() + 12 * 60 * 1000;
+    let latest = created;
+
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      latest = await nativeJsonGet<VideoGenerationResponse>(
+        joinEndpoint(profile.baseUrl, `/videos/${encodeURIComponent(jobId)}`),
+        profile.apiKey,
+        30000,
+      );
+      const status = String(latest.status ?? '').toLowerCase();
+      if (['failed', 'cancelled', 'canceled'].includes(status)) {
+        const detail = typeof latest === 'object' && latest !== null
+          ? (latest as Record<string, unknown>).error
+          : undefined;
+        throw new APIError(
+          typeof detail === 'string' ? detail : `Video job ${status}`,
+          'MEDIA_JOB_FAILED',
+          502,
+          false,
+          'nvidia',
+        );
+      }
+      if (status === 'completed') break;
+    }
+
+    if (String(latest.status ?? '').toLowerCase() !== 'completed') {
+      throw new APIError(
+        `Video job ${jobId} did not complete within the 12-minute client limit.`,
+        'MEDIA_JOB_TIMEOUT',
+        408,
+        true,
+        'nvidia',
+        jobId,
+      );
+    }
+    created = latest;
+  }
+
+  const completedBase64 = firstBase64Video(created);
+  if (completedBase64) {
+    return { ...created, status: 'completed', data: { b64_json: completedBase64 } };
+  }
+
+  if (jobId) {
+    const content = await nativeBinaryGet(
+      joinEndpoint(profile.baseUrl, `/videos/${encodeURIComponent(jobId)}/content`),
+      profile.apiKey,
+      300000,
+    );
+    return {
+      created: created.created,
+      id: jobId,
+      status: 'completed',
+      data: { b64_json: content.data_base64 },
+    };
+  }
+
+  const directUrl = Array.isArray(created.data) ? created.data[0]?.url : created.data?.url;
+  if (directUrl && /^https?:/i.test(directUrl)) {
+    const content = await nativeBinaryGet(directUrl, profile.apiKey, 300000);
+    return {
+      created: created.created,
+      status: 'completed',
+      data: { b64_json: content.data_base64 },
+    };
+  }
+
+  throw new APIError(
+    'Video endpoint returned no downloadable video or job id.',
+    'MEDIA_EMPTY_RESULT',
+    502,
+    false,
+    'nvidia',
   );
 }
