@@ -312,8 +312,9 @@ export function useAgent({
       }),
     }));
 
-    continuationRef.current = [...continuationRef.current, ...deniedMessages];
-    previousLengthRef.current = continuationRef.current.length;
+    const continuation = [...continuationRef.current, ...deniedMessages];
+    continuationRef.current = continuation;
+    previousLengthRef.current = continuation.length;
     setStreamingText('');
     setError(null);
 
@@ -323,8 +324,13 @@ export function useAgent({
 
     if (!mountedRef.current) return;
     setApprovals([]);
-    setStatus('idle');
-  }, [approvals, onMessages]);
+    setStatus('running');
+
+    // A denial is a valid tool result, not the end of the agent turn.
+    // Resume the model with the exact conversation state so it can recover,
+    // choose a different tool, or explain why it cannot proceed.
+    await startRun(continuation, []);
+  }, [approvals, onMessages, startRun]);
 
   const reset = useCallback(() => {
     runIdRef.current += 1;
