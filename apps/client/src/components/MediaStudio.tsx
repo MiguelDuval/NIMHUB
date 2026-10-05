@@ -71,17 +71,36 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
   const mediaModels = useMemo(() => (visualKind ? getMediaModelsForKind(visualKind) : []), [visualKind]);
   const selectedMediaModel = getMediaModelDefinition(mediaModelId);
 
-  useEffect(() => {
-    let cancelled = false;
-    if (!visualKind) { setMediaProfile(null); setMediaModelId(''); return; }
-    void getMediaProviderConfig(visualKind).then((profile) => {
-      if (cancelled) return;
+  const loadMediaProfile = useCallback(async () => {
+    if (!visualKind) {
+      setMediaProfile(null);
+      setMediaModelId('');
+      return;
+    }
+
+    try {
+      const profile = await getMediaProviderConfig(visualKind);
       setMediaProfile(profile);
-      const inCatalog = getMediaModelDefinition(profile.model) && mediaModels.some((item) => item.id === profile.model);
+      const inCatalog = Boolean(getMediaModelDefinition(profile.model)) &&
+        mediaModels.some((item) => item.id === profile.model);
       setMediaModelId(inCatalog ? profile.model : mediaModels[0]?.id ?? '');
-    }).catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load media profile'); });
-    return () => { cancelled = true; };
-  }, [visualKind, mediaModels]);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load media profile');
+    }
+  }, [mediaModels, visualKind]);
+
+  useEffect(() => {
+    void loadMediaProfile();
+    if (typeof window === 'undefined' || !visualKind) return;
+
+    const handleConfigChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ kind?: string }>).detail;
+      if (detail?.kind === visualKind) void loadMediaProfile();
+    };
+    window.addEventListener('nimhub:media-config-changed', handleConfigChanged);
+    return () => window.removeEventListener('nimhub:media-config-changed', handleConfigChanged);
+  }, [loadMediaProfile, visualKind]);
 
   const handleMediaModelChange = async (nextId: string) => {
     if (!visualKind) return;
@@ -239,8 +258,8 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
         <label className="settings-field"><span>Reference image for editing</span><input type="file" accept="image/*" onChange={(e) => setReferenceImage(e.target.files?.[0] ?? null)} disabled={busy} /></label>
       </div>
       <div className="media-action-row">
-        <button className="btn-primary" onClick={() => void runImageGenerate()} disabled={busy || !prompt.trim()}>Generate image</button>
-        <button className="btn-secondary" onClick={() => void runImageEdit()} disabled={busy || !prompt.trim() || !referenceImage}>Edit reference image</button>
+        <button className="btn-primary" onClick={() => void runImageGenerate()} disabled={busy || !prompt.trim() || !selectedMediaModel?.functions.includes('image-generation')}>Generate image</button>
+        <button className="btn-secondary" onClick={() => void runImageEdit()} disabled={busy || !prompt.trim() || !referenceImage || !selectedMediaModel?.functions.includes('image-editing')}>Edit reference image</button>
         {referenceImage && <button className="btn-secondary" onClick={() => setReferenceImage(null)} disabled={busy}>Remove reference</button>}
       </div>
       {artifact?.type === 'image' && <img className="media-result-image" src={artifact.url} alt={artifact.name} />}
@@ -284,7 +303,7 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
         <label className="settings-field"><span>Reference image</span><input type="file" accept="image/*" onChange={(e) => setVideoImage(e.target.files?.[0] ?? null)} disabled={busy} /></label>
       </div>
       <div className="media-action-row">
-        <button className="btn-primary" onClick={() => void runVideo()} disabled={busy || !prompt.trim()}>Generate video</button>
+        <button className="btn-primary" onClick={() => void runVideo()} disabled={busy || !prompt.trim() || !selectedMediaModel?.functions.includes('video-generation')}>Generate video</button>
         {videoImage && <button className="btn-secondary" onClick={() => setVideoImage(null)} disabled={busy}>Remove reference</button>}
       </div>
       {artifact?.type === 'video' && <video className="media-result-video" src={artifact.url} controls playsInline />}
