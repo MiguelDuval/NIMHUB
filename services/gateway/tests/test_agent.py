@@ -388,6 +388,65 @@ async def test_approval_continuation_skips_completed_sibling_tool_errors() -> No
     assert len(nim.payloads) == 1
 
 @pytest.mark.asyncio
+async def test_denied_tool_result_can_resume_agent_without_reapproval() -> None:
+    reg = registry(permission="destructive")
+    protected = next(tool for tool in await reg.list_all_tools() if tool.name == "protected_write")
+    call = tool_call(protected.model_name, "call-denied", "danger")
+    first = {
+        "id": "chat-1",
+        "object": "chat.completion",
+        "created": 1,
+        "model": "test-model",
+        "choices": [{
+            "index": 0,
+            "message": {"role": "assistant", "content": None, "tool_calls": [call]},
+            "finish_reason": "tool_calls",
+        }],
+    }
+
+    first_nim = FakeNIM([first])
+    first_result = await AgentRuntime(first_nim, reg).run(
+        AgentRunRequest(
+            model="test-model",
+            messages=[{"role": "user", "content": "write"}],
+        )
+    )
+    assert first_result.status == "approval_required"
+
+    denied_messages = first_result.messages + [{
+        "role": "tool",
+        "tool_call_id": "call-denied",
+        "content": json.dumps({"ok": False, "error": "User denied this tool call."}),
+    }]
+    final = {
+        "id": "chat-2",
+        "object": "chat.completion",
+        "created": 2,
+        "model": "test-model",
+        "choices": [{
+            "index": 0,
+            "message": {"role": "assistant", "content": "I will use a safe alternative."},
+            "finish_reason": "stop",
+        }],
+    }
+
+    nim = FakeNIM([final])
+    result = await AgentRuntime(nim, reg).run(
+        AgentRunRequest(
+            model="test-model",
+            messages=denied_messages,
+        )
+    )
+
+    assert result.status == "completed"
+    assert result.messages[-2]["tool_call_id"] == "call-denied"
+    assert "User denied this tool call." in result.messages[-2]["content"]
+    assert result.messages[-1]["content"] == "I will use a safe alternative."
+    assert len(nim.payloads) == 1
+    assert nim.payloads[0]["messages"][-1]["role"] == "tool"
+
+
+@pytest.mark.asyncio
 async def test_streaming_approval_executes_original_call_before_model_resume() -> None:
     reg = registry(permission="destructive")
     protected = next(tool for tool in await reg.list_all_tools() if tool.name == "protected_write")

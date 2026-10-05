@@ -19,6 +19,7 @@ import { Composer } from './components/Composer';
 import { AgentApprovalCard } from './components/AgentApprovalCard';
 import { SettingsScreen } from './components/SettingsScreen';
 import { MediaStudio, type MediaMode } from './components/MediaStudio';
+import { ArtifactLibrary } from './components/ArtifactLibrary';
 import './styles.css';
 
 function storedToChatMessage(msg: StoredMessage): ChatMessage {
@@ -89,7 +90,8 @@ export default function App() {
   const [retryCount, setRetryCount] = useState(0);
   const [agentMode, setAgentMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [workspaceMode, setWorkspaceMode] = useState<MediaMode | 'chat'>('chat');
+  const [showAgentInfo, setShowAgentInfo] = useState(false);
+  const [workspaceMode, setWorkspaceMode] = useState<MediaMode | 'chat' | 'library'>('chat');
   const currentConversationRef = useRef(currentConversation);
   const messagesAreaRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
@@ -326,7 +328,7 @@ export default function App() {
     ],
   );
 
-  const handleWorkspaceModeChange = useCallback((mode: MediaMode | 'chat') => {
+  const handleWorkspaceModeChange = useCallback((mode: MediaMode | 'chat' | 'library') => {
     if (effectiveBusy) return;
     if (mode !== 'chat' && agentMode) {
       setAgentMode(false);
@@ -337,13 +339,22 @@ export default function App() {
 
   const handleAgentToggle = useCallback(() => {
     if (effectiveBusy) return;
+    if (!canUseAgent) {
+      setShowAgentInfo(true);
+      return;
+    }
+    setShowAgentInfo(false);
     if (agentMode) {
       setAgentMode(false);
       resetAgent();
       return;
     }
     setAgentMode(true);
-  }, [agentMode, effectiveBusy, resetAgent]);
+  }, [agentMode, effectiveBusy, resetAgent, canUseAgent]);
+
+  useEffect(() => {
+    if (canUseAgent) setShowAgentInfo(false);
+  }, [canUseAgent]);
 
   const handleConversationSelect = useCallback(
     async (conversationId: string) => {
@@ -474,7 +485,7 @@ export default function App() {
         </div>
         <div className="topbar-center">
           <div className="workstation-mode-buttons" aria-label="Workspace mode">
-            {(['chat', 'image', 'voice', 'video'] as const).map((mode) => (
+            {(['chat', 'image', 'voice', 'video', 'library'] as const).map((mode) => (
               <button
                 key={mode}
                 type="button"
@@ -482,22 +493,26 @@ export default function App() {
                 onClick={() => handleWorkspaceModeChange(mode)}
                 disabled={effectiveBusy}
               >
-                {mode === 'chat' ? 'Chat' : mode === 'image' ? 'Image' : mode === 'voice' ? 'Voice' : 'Video'}
+                {mode === 'chat' ? 'Chat' : mode === 'image' ? 'Image' : mode === 'voice' ? 'Voice' : mode === 'video' ? 'Video' : 'Library'}
               </button>
             ))}
           </div>
           <button
             className={'mode-toggle ' + (agentMode ? 'active' : '')}
             onClick={handleAgentToggle}
-            disabled={!canUseAgent || effectiveBusy}
-            title={
-              canUseAgent
-                ? 'Toggle model-driven MCP agent mode'
-                : 'Selected model does not advertise tool-calling'
-            }
+            disabled={effectiveBusy}
+            aria-expanded={showAgentInfo}
+            title={canUseAgent ? 'Toggle model-driven MCP agent mode' : (agentAvailabilityReason ?? 'Agent is unavailable')}
           >
             {agentMode ? 'Agent ON' : 'Agent'}
           </button>
+          {showAgentInfo && !canUseAgent && (
+            <div className="agent-availability-popover" role="status">
+              <strong>Agent unavailable</strong>
+              <span>{agentAvailabilityReason}</span>
+              <button type="button" className="btn-secondary" onClick={() => setShowSettings(true)}>Open Settings</button>
+            </div>
+          )}
           <ModelSelector
             models={models}
             selectedModelId={selectedModelId}
@@ -506,6 +521,7 @@ export default function App() {
             loading={modelsLoading}
             showDetails={showModelDetails}
             onToggleDetails={() => setShowModelDetails(!showModelDetails)}
+            filterCapability="chat"
           />
           <MCPStatus
             enabled={canUseAgent}
@@ -692,13 +708,13 @@ export default function App() {
               </div>
             )}
 
-            {agentActivities.length > 0 && agentStatus === 'running' && (
+            {agentActivities.length > 0 && agentStatus !== 'idle' && agentStatus !== 'cancelled' && (
               <div className="agent-activity" aria-live="polite" aria-label="Agent activity">
                 {agentActivities.map((activity) => (
                   <div className="agent-activity-item" key={activity.id}>
                     <span className={'agent-activity-dot ' + activity.type}></span>
                     <span className="agent-activity-label">
-                      {activity.type === 'tool_error' ? 'Tool error' : 'Tool completed'}
+                      {activity.type === 'tool_error' ? 'Tool error' : agentStatus === 'running' ? 'Tool completed' : 'Tool completed'}
                     </span>
                     <strong>{activity.tool ?? 'MCP tool'}</strong>
                     {activity.message && <span className="agent-activity-message">{activity.message}</span>}
@@ -731,6 +747,8 @@ export default function App() {
               }
             />
           </div>
+          ) : workspaceMode === 'library' ? (
+            <ArtifactLibrary />
           ) : (
             <MediaStudio
               mode={workspaceMode}

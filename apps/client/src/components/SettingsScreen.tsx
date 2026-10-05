@@ -9,6 +9,7 @@ import {
   saveNvidiaConfig,
 } from '../services/nvidiaConfig';
 import { MediaProviderSettings } from './MediaProviderSettings';
+import { NvidiaInstructions } from './NvidiaInstructions';
 import type { GatewayConnectionStatus } from '../hooks/useGatewayStatus';
 import type { HealthResponse } from '../types';
 
@@ -47,6 +48,7 @@ export function SettingsScreen({
   const [testingGateway, setTestingGateway] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showInstructions, setShowInstructions] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -146,9 +148,10 @@ export function SettingsScreen({
             <h2>Settings</h2>
             <p>Everything needed to make the Android app usable lives here.</p>
           </div>
-          <button className="icon-btn settings-close" type="button" onClick={onClose} aria-label="Close settings">
-            ×
-          </button>
+          <div className="settings-header-actions">
+            <button className="btn-secondary settings-instructions-button" type="button" onClick={() => setShowInstructions(true)}>How this works</button>
+            <button className="icon-btn settings-close" type="button" onClick={onClose} aria-label="Close settings">×</button>
+          </div>
         </header>
 
         <div className="settings-scroll">
@@ -305,6 +308,7 @@ export function SettingsScreen({
             </div>
           )}
         </div>
+        <NvidiaInstructions open={showInstructions} onClose={() => setShowInstructions(false)} />
       </div>
     </div>
   );

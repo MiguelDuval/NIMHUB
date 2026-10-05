@@ -31,6 +31,7 @@ export class APIError extends Error {
   public readonly retryable: boolean;
   public readonly provider?: string;
   public readonly requestId?: string;
+  public readonly jobId?: string;
   public readonly status: number;
 
   constructor(
@@ -39,7 +40,8 @@ export class APIError extends Error {
     status: number,
     retryable: boolean,
     provider?: string,
-    requestId?: string
+    requestId?: string,
+    jobId?: string,
   ) {
     super(message);
     this.name = 'APIError';
@@ -47,6 +49,7 @@ export class APIError extends Error {
     this.retryable = retryable;
     this.provider = provider;
     this.requestId = requestId;
+    this.jobId = jobId;
     this.status = status;
   }
 
@@ -58,7 +61,8 @@ export class APIError extends Error {
       response.status,
       (detail?.retryable as boolean) ?? response.status >= 500,
       detail?.provider as string | undefined,
-      detail?.requestId as string | undefined
+      detail?.requestId as string | undefined,
+      detail?.jobId as string | undefined,
     );
   }
 }
@@ -191,8 +195,9 @@ function normalizeDirectModels(data: any): ModelCapabilityInfo[] {
             ].includes(item as ModelCapability),
         )
       : [];
-    const capabilities: ModelCapability[] =
-      rawCapabilities.length > 0 ? rawCapabilities : inferred?.capabilities ?? ['chat'];
+    const capabilities: ModelCapability[] = inferred
+      ? Array.from(new Set([...rawCapabilities, ...inferred.capabilities]))
+      : rawCapabilities.length > 0 ? rawCapabilities : ['chat'];
     const endpointFamily = (
       typeof model.endpoint_family === 'string' &&
       ['chat', 'image', 'video', 'speech', 'embedding'].includes(model.endpoint_family)

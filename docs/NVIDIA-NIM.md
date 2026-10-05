@@ -10,11 +10,20 @@ References:
 - https://docs.nvidia.com/nim/visual-genai/latest/api/index.html
 - https://docs.nvidia.com/nim/speech/latest/
 - https://build.nvidia.com/models
+- https://build.nvidia.com/nvidia/cosmos3-nano/modelcard
 
 ## Hosted access
 Use a configurable NVIDIA API key and configurable base URL. Never commit credentials. Do not assume model IDs, quotas, free endpoints or availability are permanent.
 
-Hosted Visual GenAI and Speech models can use model/function-specific NVIDIA endpoints. NIM Hub therefore stores a separate endpoint/model profile for Image, Video, ASR and TTS, with an optional dedicated key per profile and fallback to the Chat key.
+Hosted Visual GenAI and Speech models can use model/function-specific NVIDIA endpoints. NIM Hub therefore stores a separate endpoint/model profile for Image, Video, ASR and TTS, with an optional dedicated key per profile and fallback to the primary NVIDIA key where the target service accepts it.
+
+### Cosmos3 Nano hosted API
+Cosmos3 Nano is a managed hosted endpoint at:
+https://ai.api.nvidia.com/v1/cosmos/nvidia/cosmos3-nano
+
+NVIDIA's current model card documents this route as a direct POST endpoint authenticated with the endpoint-access key supplied for the hosted endpoint. Do not probe Cosmos3 with the generic Chat /v1/models discovery call. NIM Hub's connection test sends an intentionally incomplete validation request: authentication and routing are checked, but the request is rejected during input validation so no image/video generation is started.
+
+The Build.NVIDIA Cosmos3 page exposes a Get API Key action for its hosted free endpoint. The key entered in the Image or Video profile is stored separately in Android secure storage and is preferred over the primary Chat key.
 
 ## LLM/VLM
 Required core behavior: /v1/models discovery, streamed chat, tool calling, image input where supported, timeout/cancel handling and structured error mapping.
@@ -25,7 +34,7 @@ The Android client must not treat every discovered model as Chat. When provider 
 Visual GenAI documents OpenAI-compatible image generation/editing. NIM Hub uses /v1/images/generations for generation and /v1/images/edits with native Android multipart transport for editing. Responses request base64 output so images can be persisted as local artifacts.
 
 ## Video
-Visual GenAI provides OpenAI-compatible video generation. NIM Hub uses /v1/videos/generations with a longer request timeout and persists returned base64 video as a local artifact.
+Visual GenAI video deployments expose an OpenAI-compatible job workflow. NIM Hub uses /v1/videos for current self-hosted video jobs, polls /v1/videos/{id} until completion, then downloads /v1/videos/{id}/content. It keeps /v1/videos/generations as a compatibility fallback for older synchronous deployments and persists the finished MP4 as a local artifact.
 
 ## Speech
 Speech NIM exposes multipart ASR at /v1/audio/transcriptions and TTS synthesis at /v1/audio/synthesize. NIM Hub sends microphone/audio payloads through a small Android-native multipart plugin so speech requests do not depend on browser CORS or WebView multipart behavior.

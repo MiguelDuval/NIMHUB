@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { getNvidiaApiKey, normalizeNvidiaBaseUrl, normalizeNvidiaApiKey } from './nvidiaConfig';
 import { secureGet, secureRemove, secureSet } from './secureStorage';
+import { getMediaModelDefinition } from './mediaCatalog';
 
 export type MediaProviderKind = 'image' | 'video' | 'asr' | 'tts';
 
@@ -17,8 +18,8 @@ type StoredProfile = Omit<MediaProviderConfig, 'apiKey' | 'usesChatKey'>;
 
 const META_PREFIX = 'nimhub.media.';
 const DEFAULTS: Record<MediaProviderKind, StoredProfile> = {
-  image: { kind: 'image', baseUrl: '', model: 'qwen/qwen-image-2512' },
-  video: { kind: 'video', baseUrl: '', model: 'wan-ai/wan2.2' },
+  image: { kind: 'image', baseUrl: 'https://ai.api.nvidia.com/v1', model: 'nvidia/cosmos3-nano' },
+  video: { kind: 'video', baseUrl: 'https://ai.api.nvidia.com/v1', model: 'nvidia/cosmos3-nano' },
   asr: { kind: 'asr', baseUrl: '', model: 'parakeet-tdt-0.6b' },
   tts: {
     kind: 'tts',
@@ -57,10 +58,17 @@ function readMeta(kind: MediaProviderKind): StoredProfile {
 
   try {
     const parsed = JSON.parse(raw) as Partial<StoredProfile>;
+    const storedModel = typeof parsed.model === 'string' ? parsed.model.trim() : '';
+    const storedBaseUrl = typeof parsed.baseUrl === 'string' ? parsed.baseUrl.trim() : '';
+    const isLegacyUnconfiguredVisualProfile =
+      (kind === 'image' && storedModel === 'qwen/qwen-image-2512' && !storedBaseUrl) ||
+      (kind === 'video' && storedModel === 'wan-ai/wan2.2' && !storedBaseUrl);
     return {
       kind,
-      baseUrl: typeof parsed.baseUrl === 'string' ? normalizeNvidiaBaseUrl(parsed.baseUrl) : fallback.baseUrl,
-      model: typeof parsed.model === 'string' ? parsed.model.trim() : fallback.model,
+      baseUrl: isLegacyUnconfiguredVisualProfile
+        ? fallback.baseUrl
+        : (storedBaseUrl ? normalizeNvidiaBaseUrl(storedBaseUrl) : ''),
+      model: isLegacyUnconfiguredVisualProfile ? fallback.model : (storedModel || fallback.model),
       ...(kind === 'tts'
         ? { voice: typeof parsed.voice === 'string' ? parsed.voice.trim() : fallback.voice }
         : {}),
@@ -82,10 +90,13 @@ export async function getMediaProviderConfig(kind: MediaProviderKind): Promise<M
   const meta = readMeta(kind);
   const dedicatedKey = await readDedicatedKey(kind);
   const chatKey = await getNvidiaApiKey();
+  const model = getMediaModelDefinition(meta.model);
+  const mayReusePrimaryKey = model?.credentialPolicy !== 'endpoint-key';
+  const effectiveChatKey = mayReusePrimaryKey ? chatKey : null;
   return {
     ...meta,
-    apiKey: dedicatedKey ?? chatKey,
-    usesChatKey: !dedicatedKey && Boolean(chatKey),
+    apiKey: dedicatedKey ?? effectiveChatKey,
+    usesChatKey: !dedicatedKey && Boolean(effectiveChatKey),
   };
 }
 
@@ -95,22 +106,21 @@ export function getMediaProviderDefaults(kind: MediaProviderKind): StoredProfile
 
 export async function saveMediaProviderConfig(
   kind: MediaProviderKind,
-  config: { apiKey: string; baseUrl: string; model: string; voice?: string },
+  config: { apiKey?: string | null; baseUrl: string; model: string; voice?: string },
 ): Promise<void> {
   assertNative();
   const model = config.model.trim();
   if (!model) throw new Error('Model ID is required');
 
   const baseUrl = config.baseUrl.trim();
-  if (!baseUrl) throw new Error('Media API base URL is required');
-
-  const normalizedBaseUrl = normalizeNvidiaBaseUrl(baseUrl);
-  const normalizedKey = config.apiKey.trim();
-
-  if (normalizedKey) {
-    await secureSet(KEY_STORAGE[kind], normalizeNvidiaApiKey(normalizedKey));
-  } else {
-    await secureRemove(KEY_STORAGE[kind]);
+  const normalizedBaseUrl = baseUrl ? normalizeNvidiaBaseUrl(baseUrl) : '';
+  if (config.apiKey !== undefined) {
+    const normalizedKey = config.apiKey?.trim() ?? '';
+    if (normalizedKey) {
+      await secureSet(KEY_STORAGE[kind], normalizeNvidiaApiKey(normalizedKey));
+    } else {
+      await secureRemove(KEY_STORAGE[kind]);
+    }
   }
 
   const payload: StoredProfile = {
@@ -120,6 +130,17 @@ export async function saveMediaProviderConfig(
     ...(kind === 'tts' ? { voice: (config.voice ?? '').trim() } : {}),
   };
 
+  window.localStorage.setItem(META_STORAGE[kind], JSON.stringify(payload));
+  window.dispatchEvent(new CustomEvent('nimhub:media-config-changed', { detail: { kind } }));
+}
+
+export async function setMediaProviderModel(kind: MediaProviderKind, model: string, baseUrl: string): Promise<void> {
+  assertNative();
+  const normalizedModel = model.trim();
+  if (!normalizedModel) throw new Error('Media model is required');
+  const normalizedBaseUrl = baseUrl.trim() ? normalizeNvidiaBaseUrl(baseUrl) : '';
+  const current = readMeta(kind);
+  const payload: StoredProfile = { ...current, kind, model: normalizedModel, baseUrl: normalizedBaseUrl };
   window.localStorage.setItem(META_STORAGE[kind], JSON.stringify(payload));
   window.dispatchEvent(new CustomEvent('nimhub:media-config-changed', { detail: { kind } }));
 }

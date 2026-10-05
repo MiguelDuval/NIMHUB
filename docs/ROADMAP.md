@@ -32,8 +32,9 @@
 - ✅ Push-to-talk ASR → Chat → TTS workflow
 - ✅ Video generation Media Studio vertical slice
 - ✅ Generated media stored as local artifacts
+- ✅ Target-specific media model selection and endpoint diagnostics
+- ✅ Native Android export of image/video/audio artifacts
 - ⏳ Hands-free interruption / continuous conversation
-- ⏳ Full artifact-library UI and background persistence
 
 ## Phase 3 — Agent
 - native tool loop
@@ -43,15 +44,16 @@
 - filesystem/workspace tools
 
 ## Phase 4 — Long-running media
-- video jobs
-- job state machine
-- artifact library
-- background agent runs
+- ✅ video jobs
+- ✅ video job state machine / progress reporting
+- ✅ artifact library
+- ✅ Android MediaStore export
+- ⏳ background agent runs
 
 ## Phase 5 — Mobile packaging
 - polished PWA install flow
-- optional Capacitor Android package
-- secure device credential storage if required
+- ✅ Capacitor Android package
+- ✅ secure Android credential storage
 
 ## Deferred
 No SaaS billing, enterprise administration, Kubernetes or cloud autoscaling unless the product direction explicitly changes.

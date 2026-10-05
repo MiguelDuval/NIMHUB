@@ -11,18 +11,25 @@ import type {
   NativeMultipartResponse,
 } from '../types';
 import { getMediaProviderConfig, type MediaProviderKind } from './mediaConfig';
+import { getMediaModelDefinition } from './mediaCatalog';
 import { APIError } from './api';
 import { normalizeNvidiaApiKey } from './nvidiaConfig';
 
 interface NimhubMediaHttpPlugin {
   postMultipart(options: {
     url: string;
-    apiKey: string;
+    apiKey?: string | null;
     fields?: Record<string, string>;
     fileBase64?: string;
     fileFieldName?: string;
     fileName?: string;
     fileMimeType?: string;
+    connectTimeout?: number;
+    readTimeout?: number;
+  }): Promise<NativeMultipartResponse>;
+  getBinary(options: {
+    url: string;
+    apiKey?: string;
     connectTimeout?: number;
     readTimeout?: number;
   }): Promise<NativeMultipartResponse>;
@@ -36,21 +43,21 @@ function assertNative(): void {
   }
 }
 
+function firstBase64Image(response: ImageGenerationResponse | ImageEditResponse): string | null {
+  return response.data?.[0]?.b64_json ?? null;
+}
+
+function firstBase64Video(response: VideoGenerationResponse): string | null {
+  const item = Array.isArray(response.data) ? response.data[0] : response.data;
+  return item?.b64_json ?? null;
+}
+
 function joinEndpoint(baseUrl: string, path: string): string {
   return baseUrl.replace(/\/+$/, '') + '/' + path.replace(/^\/+/, '');
 }
 
-async function requireProfile(kind: MediaProviderKind) {
+async function requireProfile(kind: MediaProviderKind, options?: { allowKeyless?: boolean }) {
   const profile = await getMediaProviderConfig(kind);
-  if (!profile.apiKey) {
-    throw new APIError(
-      `No API key configured for ${kind.toUpperCase()}. Configure a dedicated media key or the Chat NVIDIA key.`,
-      'MEDIA_NOT_CONFIGURED',
-      503,
-      false,
-      'nvidia',
-    );
-  }
   if (!profile.baseUrl) {
     throw new APIError(
       `No API base URL configured for ${kind.toUpperCase()}.`,
@@ -60,15 +67,24 @@ async function requireProfile(kind: MediaProviderKind) {
       'nvidia',
     );
   }
+  if (!profile.apiKey && !options?.allowKeyless) {
+    throw new APIError(
+      `No API key configured for ${kind.toUpperCase()}. Configure a dedicated media key or the Chat NVIDIA key.`,
+      'MEDIA_NOT_CONFIGURED',
+      503,
+      false,
+      'nvidia',
+    );
+  }
   return profile;
 }
 
-async function nativeJsonPost<T>(url: string, apiKey: string, body: unknown, timeout: number): Promise<T> {
+async function nativeJsonPost<T>(url: string, apiKey: string | null, body: unknown, timeout: number): Promise<T> {
   const response = await CapacitorHttp.request({
     url,
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${normalizeNvidiaApiKey(apiKey)}`,
+      ...(apiKey ? { Authorization: `Bearer ${normalizeNvidiaApiKey(apiKey)}` } : {}),
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
@@ -97,6 +113,71 @@ async function nativeJsonPost<T>(url: string, apiKey: string, body: unknown, tim
   return data as T;
 }
 
+async function nativeJsonGet<T>(url: string, apiKey: string | null, timeout: number): Promise<T> {
+  const response = await CapacitorHttp.request({
+    url,
+    method: 'GET',
+    headers: {
+      ...(apiKey ? { Authorization: `Bearer ${normalizeNvidiaApiKey(apiKey)}` } : {}),
+      Accept: 'application/json',
+    },
+    connectTimeout: 15000,
+    readTimeout: timeout,
+    responseType: 'json',
+  });
+
+  const data = response.data;
+  if (response.status < 200 || response.status >= 300) {
+    const detail = typeof data === 'object' && data !== null ? data as Record<string, unknown> : {};
+    const nested = detail.error && typeof detail.error === 'object' ? detail.error as Record<string, unknown> : {};
+    const message = String(nested.message ?? detail.message ?? `NVIDIA video job request failed: HTTP ${response.status}`);
+    throw new APIError(
+      response.status === 401 || response.status === 403 ? 'NVIDIA rejected the media API key' : message,
+      response.status === 429 ? 'NVIDIA_RATE_LIMITED' : 'NVIDIA_MEDIA_REQUEST_FAILED',
+      response.status,
+      response.status === 429 || response.status >= 500,
+      'nvidia',
+    );
+  }
+  return data as T;
+}
+
+function apiKeyForOrigin(url: string, configuredBaseUrl: string, apiKey: string | null): string | null {
+  if (!apiKey) return null;
+  try {
+    return new URL(url).origin === new URL(configuredBaseUrl).origin ? apiKey : null;
+  } catch {
+    return null;
+  }
+}
+
+async function nativeBinaryGet(
+  url: string,
+  apiKey: string | null,
+  timeout: number,
+): Promise<NativeMultipartResponse> {
+  const response = await NativeMediaHttp.getBinary({
+    url,
+    ...(apiKey ? { apiKey } : {}),
+    connectTimeout: 15000,
+    readTimeout: timeout,
+  });
+  if (response.status < 200 || response.status >= 300) {
+    const payload = parseMultipartPayload(response);
+    const detail = typeof payload === 'object' && payload !== null ? payload as Record<string, unknown> : {};
+    const nested = detail.error && typeof detail.error === 'object' ? detail.error as Record<string, unknown> : {};
+    const message = String(nested.message ?? detail.message ?? `Media content download failed: HTTP ${response.status}`);
+    throw new APIError(
+      response.status === 401 || response.status === 403 ? 'Media content endpoint rejected the configured API key' : message,
+      response.status === 429 ? 'NVIDIA_RATE_LIMITED' : 'MEDIA_DOWNLOAD_FAILED',
+      response.status,
+      response.status === 429 || response.status >= 500,
+      'nvidia',
+    );
+  }
+  return response;
+}
+
 function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -116,8 +197,7 @@ function base64ToBlob(data: string, mimeType: string): Blob {
   return new Blob([output], { type: mimeType });
 }
 
-function parseMultipartPayload(response: NativeMultipartResponse): unknown {
-  const bytes = atob(response.data_base64);
+function parseMultipartPayload(response: NativeMultipartResponse): unknown {  const bytes = atob(response.data_base64);
   const output = new Uint8Array(bytes.length);
   for (let i = 0; i < bytes.length; i += 1) output[i] = bytes.charCodeAt(i);
   const text = new TextDecoder().decode(output);
@@ -143,12 +223,129 @@ function assertSuccess(response: NativeMultipartResponse, operation: string): vo
   );
 }
 
+export interface MediaProviderProbe {
+  ok: boolean;
+  status: number;
+  message: string;
+  target: string;
+}
+
+export async function testMediaProvider(
+  kind: MediaProviderKind,
+  overrides?: { baseUrl?: string; model?: string; apiKey?: string | null },
+): Promise<MediaProviderProbe> {
+  assertNative();
+  const stored = await getMediaProviderConfig(kind);
+  const profile = {
+    ...stored,
+    baseUrl: overrides?.baseUrl?.trim() || stored.baseUrl,
+    model: overrides?.model?.trim() || stored.model,
+    apiKey: overrides && 'apiKey' in overrides ? (overrides.apiKey?.trim() || null) : stored.apiKey,
+  };
+  if (!profile.baseUrl) {
+    throw new APIError(
+      `No API base URL configured for ${kind.toUpperCase()}.`,
+      'MEDIA_ENDPOINT_NOT_CONFIGURED',
+      503,
+      false,
+      'nvidia',
+    );
+  }
+
+  const model = getMediaModelDefinition(profile.model);
+  const selfHosted = model?.availability === 'self-hosted';
+  const probePath = selfHosted ? '/health/ready' : '/models';
+  const target = joinEndpoint(profile.baseUrl, probePath);
+
+  const response = await CapacitorHttp.request({
+    url: target,
+    method: 'GET',
+    headers: {
+      ...(profile.apiKey ? { Authorization: `Bearer ${normalizeNvidiaApiKey(profile.apiKey)}` } : {}),
+      Accept: 'application/json',
+    },
+    connectTimeout: 15000,
+    readTimeout: 15000,
+    responseType: 'json',
+  });
+
+  const data = response.data;
+  if (response.status < 200 || response.status >= 300) {
+    const detail = typeof data === 'object' && data !== null ? data as Record<string, unknown> : {};
+    const nested = detail.error && typeof detail.error === 'object' ? detail.error as Record<string, unknown> : {};
+    const message = String(
+      nested.message ??
+      detail.message ??
+      `Media endpoint probe failed: HTTP ${response.status}`,
+    );
+    throw new APIError(
+      response.status === 401 || response.status === 403 ? 'Media endpoint rejected the configured API key' : message,
+      response.status === 429 ? 'NVIDIA_RATE_LIMITED' : 'MEDIA_PROBE_FAILED',
+      response.status,
+      response.status === 429 || response.status >= 500,
+      'nvidia',
+    );
+  }
+
+  if (selfHosted) {
+    return {
+      ok: true,
+      status: response.status,
+      message: `${model?.name ?? 'NIM'} deployment is live and ready.`,
+      target,
+    };
+  }
+
+  return {
+    ok: true,
+    status: response.status,
+    message: `NVIDIA hosted endpoint is reachable. The selected ${model?.name ?? 'model'} will be verified by the actual generation request.`,
+    target,
+  };
+}
+
 export async function generateImage(request: ImageGenerationRequest): Promise<ImageGenerationResponse> {
   assertNative();
-  const profile = await requireProfile('image');
+  const profile = await requireProfile('image', { allowKeyless: true });
+  const model = getMediaModelDefinition(profile.model || request.model);
+  if (model?.availability === 'hosted' && !profile.apiKey) {
+    throw new APIError(
+      'The selected hosted media endpoint needs an NVIDIA endpoint-access key. Add the endpoint-access key issued for the selected hosted model.',
+      'MEDIA_NOT_CONFIGURED',
+      503,
+      false,
+      'nvidia',
+    );
+  }
+  if (!model?.functions.includes('image-generation')) {
+    throw new APIError('Selected image model does not support image generation.', 'MEDIA_MODEL_UNSUPPORTED', 400, false, 'nvidia');
+  }
+
+  if (model.transport === 'cosmos3') {
+    const resolution = request.size === '832x480' ? '480_16_9'
+      : request.size === '1280x720' ? '720_16_9'
+      : '720_1_1';
+    const payload = await nativeJsonPost<{ b64_image?: string }>(
+      joinEndpoint(profile.baseUrl, model.endpoint),
+      profile.apiKey,
+      {
+        model_mode: 'text2image',
+        prompt: request.prompt,
+        resolution,
+        num_frames: 1,
+        num_inference_steps: 50,
+      },
+      180000,
+    );
+    if (!payload.b64_image) {
+      throw new APIError('Cosmos3 returned no image payload.', 'MEDIA_EMPTY_RESULT', 502, false, 'nvidia');
+    }
+    return { created: Math.floor(Date.now() / 1000), data: [{ b64_json: payload.b64_image }] };
+  }
+
   return nativeJsonPost<ImageGenerationResponse>(
     joinEndpoint(profile.baseUrl, '/images/generations'),
-    profile.apiKey!,
+    profile.apiKey,
     {
       model: profile.model || request.model,
       prompt: request.prompt,
@@ -164,10 +361,10 @@ export async function generateImage(request: ImageGenerationRequest): Promise<Im
 
 export async function editImage(request: ImageEditRequest): Promise<ImageEditResponse> {
   assertNative();
-  const profile = await requireProfile('image');
+  const profile = await requireProfile('image', { allowKeyless: true });
   const response = await NativeMediaHttp.postMultipart({
     url: joinEndpoint(profile.baseUrl, '/images/edits'),
-    apiKey: profile.apiKey!,
+    apiKey: profile.apiKey,
     fields: {
       model: profile.model || request.model,
       prompt: request.prompt,
@@ -190,17 +387,16 @@ export async function transcribeAudio(
   options?: { language?: string; wordTimeOffsets?: boolean; fileName?: string },
 ): Promise<string> {
   assertNative();
-  const profile = await requireProfile('asr');
+  const profile = await requireProfile('asr', { allowKeyless: true });
   const response = await NativeMediaHttp.postMultipart({
     url: joinEndpoint(profile.baseUrl, '/audio/transcriptions'),
-    apiKey: profile.apiKey!,
+    apiKey: profile.apiKey,
     fields: {
       ...(profile.model ? { model: profile.model } : {}),
       ...(options?.language ? { language: options.language } : {}),
       word_time_offsets: String(options?.wordTimeOffsets ?? false),
     },
-    fileBase64: await blobToBase64(audio),
-    fileName: options?.fileName ?? 'recording.webm',
+    fileBase64: await blobToBase64(audio),    fileName: options?.fileName ?? 'recording.webm',
     fileMimeType: audio.type || 'audio/webm',
     connectTimeout: 30000,
     readTimeout: 120000,
@@ -219,10 +415,10 @@ export async function synthesizeSpeech(
   options?: Partial<TTSRequest>,
 ): Promise<{ audio: Blob; contentType: string }> {
   assertNative();
-  const profile = await requireProfile('tts');
+  const profile = await requireProfile('tts', { allowKeyless: true });
   const response = await NativeMediaHttp.postMultipart({
     url: joinEndpoint(profile.baseUrl, '/audio/synthesize'),
-    apiKey: profile.apiKey!,
+    apiKey: profile.apiKey,
     fields: {
       language: options?.language ?? 'en-US',
       text: text.trim(),
@@ -239,19 +435,234 @@ export async function synthesizeSpeech(
   };
 }
 
-export async function generateVideo(request: VideoGenerationRequest): Promise<VideoGenerationResponse> {
+export type VideoGenerationPhase = 'submitting' | 'queued' | 'rendering' | 'downloading' | 'completed';
+
+export interface VideoGenerationProgress {
+  phase: VideoGenerationPhase;
+  progress?: number;
+}
+
+export async function generateVideo(
+  request: VideoGenerationRequest,
+  onProgress?: (progress: VideoGenerationProgress) => void,
+): Promise<VideoGenerationResponse> {
+  onProgress?.({ phase: 'submitting' });
+
   assertNative();
-  const profile = await requireProfile('video');
-  return nativeJsonPost<VideoGenerationResponse>(
-    joinEndpoint(profile.baseUrl, '/videos/generations'),
-    profile.apiKey!,
-    {
-      model: profile.model || request.model,
-      prompt: request.prompt,
-      size: request.size ?? '832x480',
-      seconds: request.seconds ?? 4,
-      ...(request.input_reference ? { input_reference: request.input_reference } : {}),
+  const profile = await requireProfile('video', { allowKeyless: true });
+  const model = getMediaModelDefinition(profile.model || request.model);
+  if (model?.availability === 'hosted' && !profile.apiKey) {
+    throw new APIError(
+      'The selected hosted media endpoint needs an NVIDIA endpoint-access key. Add the endpoint-access key issued for the selected hosted model.',
+      'MEDIA_NOT_CONFIGURED',
+      503,
+      false,
+      'nvidia',
+    );
+  }
+  if (!model?.functions.includes('video-generation')) {
+    throw new APIError('Selected video model does not support video generation.', 'MEDIA_MODEL_UNSUPPORTED', 400, false, 'nvidia');
+  }
+
+  if (model.transport === 'cosmos3') {
+    const seconds = request.seconds ?? 4;
+    const modelMode = request.input_reference ? 'image2video' : 'text2video';
+    const resolution = request.size === '1280x720' ? '720_16_9' : '480_16_9';
+    const payload = await nativeJsonPost<{ b64_video?: string }>(
+      joinEndpoint(profile.baseUrl, model.endpoint),
+      profile.apiKey,
+      {
+        model_mode: modelMode,
+        prompt: request.prompt,
+        resolution,
+        num_frames: Math.max(25, Math.min(197, Math.round(seconds * 24))),
+        num_inference_steps: 35,
+        fps: 24,
+        ...(request.input_reference ? { input_reference: request.input_reference } : {}),
+      },
+      300000,
+    );
+    if (!payload.b64_video) {
+      throw new APIError('Cosmos3 returned no video payload.', 'MEDIA_EMPTY_RESULT', 502, false, 'nvidia');
+    }
+    onProgress?.({ phase: 'completed', progress: 100 });
+    return { created: Math.floor(Date.now() / 1000), status: 'completed', data: { b64_json: payload.b64_video } };
+  }
+
+  const seconds = request.seconds ?? 4;
+  const numFrames = Math.max(25, Math.min(197, Math.round(seconds * 24)));
+  const createUrl = joinEndpoint(profile.baseUrl, '/videos');
+  const basePayload = {
+    model: profile.model || request.model,
+    prompt: request.prompt,
+    size: request.size ?? '832x480',
+    seconds,
+    response_format: 'url',
+    ...(request.input_reference ? { input_reference: request.input_reference } : {}),
+    nvext: {
+      fps: 24,
+      num_frames: numFrames,
+      num_inference_steps: 50,
+      ...(request.input_reference ? {
+        guidance_scale: 1,
+        boundary_ratio: 0.875,
+        guidance_scale_2: 1,
+      } : {}),
     },
-    300000,
+  };
+
+  let created: VideoGenerationResponse;
+  try {
+    created = await nativeJsonPost<VideoGenerationResponse>(
+      createUrl,
+      profile.apiKey,
+      basePayload,
+      30000,
+    );
+  } catch (err) {
+    // Older VisualGen deployments exposed the synchronous endpoint as the
+    // /videos/generations alias. Keep a compatibility fallback, but prefer the
+    // current job-based /videos lifecycle.
+    if (!(err instanceof APIError) || ![404, 405].includes(err.status)) throw err;
+
+    const legacy = await nativeJsonPost<VideoGenerationResponse>(
+      joinEndpoint(profile.baseUrl, '/videos/generations'),
+      profile.apiKey,
+      {
+        ...basePayload,
+        response_format: 'b64_json',
+      },
+      300000,
+    );
+    const legacyBase64 = firstBase64Video(legacy);
+    if (legacyBase64) {
+      onProgress?.({ phase: 'completed', progress: 100 });
+      return { ...legacy, status: 'completed', data: { b64_json: legacyBase64 } };
+    }
+    const legacyUrl = Array.isArray(legacy.data) ? legacy.data[0]?.url : legacy.data?.url;
+    if (legacyUrl && /^https?:/i.test(legacyUrl)) {
+      onProgress?.({ phase: 'downloading' });
+      const content = await nativeBinaryGet(
+        legacyUrl,
+        apiKeyForOrigin(legacyUrl, profile.baseUrl, profile.apiKey),
+        300000,
+      );
+      onProgress?.({ phase: 'completed', progress: 100 });
+      return {
+        created: legacy.created,
+        status: 'completed',
+        data: { b64_json: content.data_base64 },
+      };
+    }
+    throw new APIError(
+      'Legacy video endpoint returned no downloadable video.',
+      'MEDIA_EMPTY_RESULT',
+      502,
+      false,
+      'nvidia',
+    );
+  }
+
+  const initialStatus = String(created.status ?? '').toLowerCase();
+  const jobId = created.id;
+  if (['failed', 'cancelled', 'canceled', 'error'].includes(initialStatus)) {
+    const rawError = created.error;
+    const message = typeof rawError === 'string'
+      ? rawError
+      : rawError?.message || `Video job ${initialStatus}`;
+    throw new APIError(message, 'MEDIA_JOB_FAILED', 502, false, 'nvidia', jobId);
+  }
+  const initialProgress = created.progress;
+  if (['queued'].includes(initialStatus)) {
+    onProgress?.({ phase: 'queued', progress: initialProgress });
+  } else if (['in_progress', 'running', 'processing'].includes(initialStatus)) {
+    onProgress?.({ phase: 'rendering', progress: initialProgress });
+  }
+  if (jobId && initialStatus !== 'completed') {
+    const deadline = Date.now() + 12 * 60 * 1000;
+    let latest = created;
+
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      latest = await nativeJsonGet<VideoGenerationResponse>(
+        joinEndpoint(profile.baseUrl, `/videos/${encodeURIComponent(jobId)}`),
+        profile.apiKey,
+        30000,
+      );
+      const status = String(latest.status ?? '').toLowerCase();
+      const progress = latest.progress;
+      if (status === 'queued') onProgress?.({ phase: 'queued', progress });
+      else if (['in_progress', 'running', 'processing'].includes(status)) onProgress?.({ phase: 'rendering', progress });
+      if (['failed', 'cancelled', 'canceled', 'error'].includes(status)) {
+        const detail = latest.error;
+        const message = typeof detail === 'string'          ? detail
+          : detail?.message || `Video job ${status}`;
+        throw new APIError(
+          message,
+          'MEDIA_JOB_FAILED',
+          502,
+          false,
+          'nvidia',
+        );
+      }
+      if (status === 'completed') break;
+    }
+
+    if (String(latest.status ?? '').toLowerCase() !== 'completed') {
+      throw new APIError(
+        `Video job ${jobId} did not complete within the 12-minute client limit.`,
+        'MEDIA_JOB_TIMEOUT',
+        408,
+        true,
+        'nvidia',
+        jobId,
+      );
+    }
+    created = latest;
+  }
+
+  const completedBase64 = firstBase64Video(created);
+  if (completedBase64) {
+    onProgress?.({ phase: 'completed', progress: 100 });
+    return { ...created, status: 'completed', data: { b64_json: completedBase64 } };
+  }
+
+  onProgress?.({ phase: 'downloading' });
+  if (jobId) {
+    const content = await nativeBinaryGet(
+      joinEndpoint(profile.baseUrl, `/videos/${encodeURIComponent(jobId)}/content`),
+      profile.apiKey,
+      300000,
+    );
+    onProgress?.({ phase: 'completed', progress: 100 });
+    return {
+      created: created.created,
+      id: jobId,
+      status: 'completed',
+      data: { b64_json: content.data_base64 },
+    };
+  }
+
+  const directUrl = Array.isArray(created.data) ? created.data[0]?.url : created.data?.url;
+  if (directUrl && /^https?:/i.test(directUrl)) {
+    const content = await nativeBinaryGet(
+      directUrl,
+      apiKeyForOrigin(directUrl, profile.baseUrl, profile.apiKey),
+      300000,
+    );
+    onProgress?.({ phase: 'completed', progress: 100 });
+    return {
+      created: created.created,
+      status: 'completed',
+      data: { b64_json: content.data_base64 },
+    };
+  }
+
+  throw new APIError(
+    'Video endpoint returned no downloadable video or job id.',
+    'MEDIA_EMPTY_RESULT',
+    502,
+    false,
+    'nvidia',
   );
 }
