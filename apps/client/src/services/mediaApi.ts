@@ -529,10 +529,12 @@ export async function generateVideo(
     );
     const legacyBase64 = firstBase64Video(legacy);
     if (legacyBase64) {
+      onProgress?.({ phase: 'completed', progress: 100 });
       return { ...legacy, status: 'completed', data: { b64_json: legacyBase64 } };
     }
     const legacyUrl = Array.isArray(legacy.data) ? legacy.data[0]?.url : legacy.data?.url;
     if (legacyUrl && /^https?:/i.test(legacyUrl)) {
+      onProgress?.({ phase: 'downloading' });
       const content = await nativeBinaryGet(
         legacyUrl,
         apiKeyForOrigin(legacyUrl, profile.baseUrl, profile.apiKey),
@@ -556,6 +558,15 @@ export async function generateVideo(
 
   const initialStatus = String(created.status ?? '').toLowerCase();
   const jobId = created.id;
+  if (['failed', 'cancelled', 'canceled', 'error'].includes(initialStatus)) {
+    const rawError = (created as Record<string, unknown>).error;
+    const message = typeof rawError === 'string'
+      ? rawError
+      : typeof rawError === 'object' && rawError !== null && typeof (rawError as Record<string, unknown>).message === 'string'
+        ? String((rawError as Record<string, unknown>).message)
+        : `Video job ${initialStatus}`;
+    throw new APIError(message, 'MEDIA_JOB_FAILED', 502, false, 'nvidia', jobId);
+  }
   const initialProgress = typeof (created as Record<string, unknown>).progress === 'number'
     ? (created as Record<string, number>).progress
     : undefined;
@@ -564,7 +575,7 @@ export async function generateVideo(
   } else if (['in_progress', 'running', 'processing'].includes(initialStatus)) {
     onProgress?.({ phase: 'rendering', progress: initialProgress });
   }
-  if (jobId && ['queued', 'in_progress', 'running', 'processing'].includes(initialStatus)) {
+  if (jobId && initialStatus !== 'completed') {
     const deadline = Date.now() + 12 * 60 * 1000;
     let latest = created;
 
@@ -581,7 +592,7 @@ export async function generateVideo(
         : undefined;
       if (status === 'queued') onProgress?.({ phase: 'queued', progress });
       else if (['in_progress', 'running', 'processing'].includes(status)) onProgress?.({ phase: 'rendering', progress });
-      if (['failed', 'cancelled', 'canceled'].includes(status)) {
+      if (['failed', 'cancelled', 'canceled', 'error'].includes(status)) {
         const detail = typeof latest === 'object' && latest !== null
           ? (latest as Record<string, unknown>).error
           : undefined;
