@@ -72,7 +72,7 @@ export function AgentApprovalCard({
             onClick={handleReject}
             disabled={actionBusy}
           >
-            {rejecting ? 'Declining…' : 'Not now'}
+            {rejecting ? 'Declining…' : 'Decline & continue'}
           </button>
           <button
             className="btn-primary"
