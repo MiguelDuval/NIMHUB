@@ -83,7 +83,11 @@ export interface VideoGenerationRequest {
 export interface VideoGenerationResponse {
   created?: number;
   id?: string;
+  object?: string;
+  model?: string;
   status?: string;
+  progress?: number;
+  error?: string | { message?: string; code?: string };
   data: Array<{
     url?: string;
     b64_json?: string;
