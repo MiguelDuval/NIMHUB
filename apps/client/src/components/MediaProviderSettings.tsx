@@ -58,7 +58,11 @@ function VisualProfileEditor({ kind, profile, onReload }: Props) {
   const testConnection = async () => {
     setTesting(true); setError(null); setMessage(null);
     try {
-      const result = await testMediaProvider(kind);
+      const result = await testMediaProvider(kind, {
+        model,
+        baseUrl,
+        apiKey: apiKey.trim() || profile.apiKey,
+      });
       setMessage(result.message);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Media endpoint test failed');
