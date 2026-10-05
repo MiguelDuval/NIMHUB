@@ -304,8 +304,6 @@ export async function generateImage(request: ImageGenerationRequest): Promise<Im
     throw new APIError('Selected image model does not support image generation.', 'MEDIA_MODEL_UNSUPPORTED', 400, false, 'nvidia');
   }
 
-  onProgress?.({ phase: 'submitting' });
-
   if (model.transport === 'cosmos3') {
     const resolution = request.size === '832x480' ? '480_16_9'
       : request.size === '1280x720' ? '720_16_9'
@@ -432,6 +430,8 @@ export async function generateVideo(
   request: VideoGenerationRequest,
   onProgress?: (progress: VideoGenerationProgress) => void,
 ): Promise<VideoGenerationResponse> {
+  onProgress?.({ phase: 'submitting' });
+
   assertNative();
   const profile = await requireProfile('video', { allowKeyless: true });
   const model = getMediaModelDefinition(profile.model || request.model);
