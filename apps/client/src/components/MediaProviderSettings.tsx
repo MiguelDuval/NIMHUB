@@ -75,16 +75,6 @@ function VisualProfileEditor({ kind, profile, onReload }: Props) {
     }
   };
 
-  const useChatKey = async () => {
-    setBusy(true); setError(null);
-    try {
-      await saveMediaProviderConfig(kind, { apiKey: null, baseUrl, model });
-      await onReload();
-      setMessage('Dedicated key removed. This profile now reuses the Chat NVIDIA key.');
-    } catch (err) { setError(err instanceof Error ? err.message : 'Could not switch to Chat key'); }
-    finally { setBusy(false); }
-  };
-
   const clearDedicatedKey = async () => {
     setBusy(true); setError(null); setMessage(null);
     try {
