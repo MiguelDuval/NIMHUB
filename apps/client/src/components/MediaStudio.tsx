@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../services/api';
-import { editImage, generateImage, generateVideo, synthesizeSpeech, transcribeAudio } from '../services/mediaApi';
+import { editImage, generateImage, generateVideo, synthesizeSpeech, transcribeAudio, type VideoGenerationProgress } from '../services/mediaApi';
 import { storage } from '../services/storage';
 import { getMediaModelDefinition, getMediaModelsForKind } from '../services/mediaCatalog';
 import { getMediaProviderConfig, setMediaProviderModel, type MediaProviderConfig } from '../services/mediaConfig';
@@ -58,6 +58,7 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
   const [imageOperation, setImageOperation] = useState<'generate' | 'edit'>('generate');
   const [videoImage, setVideoImage] = useState<File | null>(null);
   const [videoSeconds, setVideoSeconds] = useState(4);
+  const [videoProgress, setVideoProgress] = useState<VideoGenerationProgress | null>(null);
   const [imageSize, setImageSize] = useState('1024x1024');
   const [videoSize, setVideoSize] = useState('832x480');
   const [mediaProfile, setMediaProfile] = useState<MediaProviderConfig | null>(null);
@@ -268,10 +269,13 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
     if (!prompt.trim()) return;
     if (!visualProviderReady) { onOpenSettings(); return; }
     if (!selectedMediaModel?.functions.includes('video-generation')) { setError('Selected model does not support video generation.'); return; }
-    setBusy(true); setError(null); clearArtifact();
+    setBusy(true); setError(null); clearArtifact(); setVideoProgress(null);
     try {
       const inputReference = videoImage ? await fileToDataUrl(videoImage) : undefined;
-      const response = await generateVideo({ model: selectedMediaModel?.id ?? '', prompt: prompt.trim(), size: videoSize, seconds: videoSeconds, input_reference: inputReference });
+      const response = await generateVideo(
+        { model: selectedMediaModel?.id ?? '', prompt: prompt.trim(), size: videoSize, seconds: videoSeconds, input_reference: inputReference },
+        setVideoProgress,
+      );
       const base64 = firstBase64Video(response);
       if (!base64) throw new Error('Video endpoint returned no base64 video');
       await saveArtifact('video', base64ToBlob(base64, 'video/mp4'), 'nimhub-video.mp4');
@@ -346,6 +350,30 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
         <button className="btn-primary" onClick={() => void runVideo()} disabled={busy || !prompt.trim() || !visualProviderReady || !selectedMediaModel?.functions.includes('video-generation')}>Generate video</button>
         {videoImage && <button className="btn-secondary" onClick={() => setVideoImage(null)} disabled={busy}>Remove reference</button>}
       </div>
+      {videoProgress && (
+        <section className="media-job-status" aria-live="polite">
+          <div className="media-job-status-head">
+            <strong>{videoProgress.phase === 'submitting'
+              ? 'Submitting video job…'
+              : videoProgress.phase === 'queued'
+              ? 'Video job queued'
+              : videoProgress.phase === 'rendering'
+              ? 'Rendering video'
+              : videoProgress.phase === 'downloading'
+              ? 'Downloading finished MP4'
+              : 'Video ready'}</strong>
+            {typeof videoProgress.progress === 'number' && videoProgress.phase !== 'downloading' && (
+              <span>{Math.round(videoProgress.progress)}%</span>
+            )}
+          </div>
+          {typeof videoProgress.progress === 'number' && videoProgress.phase !== 'downloading' && (
+            <div className="media-job-progress-track" role="progressbar" aria-valuenow={Math.round(videoProgress.progress)} aria-valuemin={0} aria-valuemax={100}>
+              <div className="media-job-progress-fill" style={{ width: Math.max(0, Math.min(100, videoProgress.progress)) + '%' }} />
+            </div>
+          )}
+          {videoProgress.phase === 'downloading' && <div className="media-job-progress-indeterminate" />}
+        </section>
+      )}
       {artifact?.type === 'video' && <video className="media-result-video" src={artifact.url} controls playsInline />}
       {artifact?.type === 'video' && <div className="media-artifact-meta">Saved artifact: {artifact.name}</div>}
       {error && <div className="settings-feedback error">{error}</div>}
