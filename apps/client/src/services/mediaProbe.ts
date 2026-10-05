@@ -117,7 +117,7 @@ export async function testMediaProvider(
     if (response.status === 429) {
       throw new Error('Cosmos3 is rate-limited right now. The endpoint is reachable and the key was presented.');
     }
-    if (response.status >= 400 && response.status < 500) {
+    if (response.status === 400 || response.status === 422) {
       return {
         ok: true,
         status: response.status,
