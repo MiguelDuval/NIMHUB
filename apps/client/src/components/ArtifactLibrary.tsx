@@ -1,8 +1,31 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { storage } from '../services/storage';
 import type { Artifact, ArtifactType } from '../types';
 
 type Filter = 'all' | ArtifactType;
+
+interface NimhubFilePlugin {
+  saveBase64(options: {
+    fileName: string;
+    mimeType: string;
+    dataBase64: string;
+  }): Promise<{ uri: string; fileName: string; mimeType: string }>;
+}
+
+const NativeFile = registerPlugin<NimhubFilePlugin>('NimhubFile');
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = String(reader.result ?? '');
+      resolve(value.includes(',') ? value.slice(value.indexOf(',') + 1) : value);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read artifact'));
+    reader.readAsDataURL(blob);
+  });
+}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return bytes + ' B';
@@ -47,13 +70,35 @@ export function ArtifactLibrary() {
     await load();
   };
 
-  const download = (artifact: Artifact) => {
-    const url = URL.createObjectURL(artifact.blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = artifact.name;
-    anchor.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const [exportingId, setExportingId] = useState<string | null>(null);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
+
+  const download = async (artifact: Artifact) => {
+    setExportingId(artifact.id);
+    setExportMessage(null);
+    try {
+      if (Capacitor.isNativePlatform()) {
+        await NativeFile.saveBase64({
+          fileName: artifact.name,
+          mimeType: artifact.mimeType,
+          dataBase64: await blobToBase64(artifact.blob),
+        });
+        setExportMessage(`Saved ${artifact.name} to the Android media library.`);
+        return;
+      }
+
+      const url = URL.createObjectURL(artifact.blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = artifact.name;
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setExportMessage(`Saved ${artifact.name}.`);
+    } catch (err) {
+      setExportMessage(err instanceof Error ? err.message : 'Could not save file');
+    } finally {
+      setExportingId(null);
+    }
   };
 
   return (
@@ -66,6 +111,7 @@ export function ArtifactLibrary() {
         </div>
         <button className="btn-secondary" type="button" onClick={() => void load()} disabled={loading}>Refresh</button>
       </header>
+      {exportMessage && <div className="settings-feedback success" role="status">{exportMessage}</div>}
 
       <div className="artifact-filter-row" role="tablist" aria-label="Artifact type">
         {(['all', 'image', 'video', 'audio'] as Filter[]).map((item) => (
@@ -100,7 +146,7 @@ export function ArtifactLibrary() {
                 <time dateTime={artifact.createdAt}>{new Date(artifact.createdAt).toLocaleString()}</time>
               </div>
               <div className="artifact-card-actions">
-                <button className="btn-secondary" type="button" onClick={() => download(artifact)}>Save file</button>
+                <button className="btn-secondary" type="button" onClick={() => void download(artifact)} disabled={exportingId !== null}>{exportingId === artifact.id ? 'Saving…' : 'Save to device'}</button>
                 <button className="btn-secondary danger-button" type="button" onClick={() => void remove(artifact)}>Delete</button>
               </div>
             </article>
