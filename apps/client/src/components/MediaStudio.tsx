@@ -117,7 +117,7 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
     return () => window.removeEventListener('nimhub:media-config-changed', handleConfigChanged);
   }, [loadMediaProfile, visualKind]);
 
-  const handleMediaModelChange = async (nextId: string) => {
+  const handleMediaModelChange = useCallback(async (nextId: string) => {
     if (!visualKind || !visibleMediaModels.some((item) => item.id === nextId)) return;
     const next = getMediaModelDefinition(nextId);
     if (!next) return;
@@ -130,7 +130,7 @@ export function MediaStudio({ mode, chatModelId, nvidiaConfigured, onOpenSetting
     setMediaProfile((current) => current ? { ...current, model: next.id, baseUrl: nextBase } : current);
     try { await setMediaProviderModel(visualKind, next.id, nextBase); }
     catch (err) { setError(err instanceof Error ? err.message : 'Could not select media model'); }
-  };
+  }, [mediaModelId, mediaProfile?.baseUrl, visualKind, visibleMediaModels]);
 
   useEffect(() => {
     if (mode !== 'image') return;
