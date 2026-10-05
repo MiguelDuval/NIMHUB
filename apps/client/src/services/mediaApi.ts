@@ -304,6 +304,8 @@ export async function generateImage(request: ImageGenerationRequest): Promise<Im
     throw new APIError('Selected image model does not support image generation.', 'MEDIA_MODEL_UNSUPPORTED', 400, false, 'nvidia');
   }
 
+  onProgress?.({ phase: 'submitting' });
+
   if (model.transport === 'cosmos3') {
     const resolution = request.size === '832x480' ? '480_16_9'
       : request.size === '1280x720' ? '720_16_9'
@@ -419,7 +421,17 @@ export async function synthesizeSpeech(
   };
 }
 
-export async function generateVideo(request: VideoGenerationRequest): Promise<VideoGenerationResponse> {
+export type VideoGenerationPhase = 'submitting' | 'queued' | 'rendering' | 'downloading' | 'completed';
+
+export interface VideoGenerationProgress {
+  phase: VideoGenerationPhase;
+  progress?: number;
+}
+
+export async function generateVideo(
+  request: VideoGenerationRequest,
+  onProgress?: (progress: VideoGenerationProgress) => void,
+): Promise<VideoGenerationResponse> {
   assertNative();
   const profile = await requireProfile('video', { allowKeyless: true });
   const model = getMediaModelDefinition(profile.model || request.model);
@@ -457,6 +469,7 @@ export async function generateVideo(request: VideoGenerationRequest): Promise<Vi
     if (!payload.b64_video) {
       throw new APIError('Cosmos3 returned no video payload.', 'MEDIA_EMPTY_RESULT', 502, false, 'nvidia');
     }
+    onProgress?.({ phase: 'completed', progress: 100 });
     return { created: Math.floor(Date.now() / 1000), status: 'completed', data: { b64_json: payload.b64_video } };
   }
 
@@ -529,6 +542,14 @@ export async function generateVideo(request: VideoGenerationRequest): Promise<Vi
 
   const initialStatus = String(created.status ?? '').toLowerCase();
   const jobId = created.id;
+  const initialProgress = typeof (created as Record<string, unknown>).progress === 'number'
+    ? (created as Record<string, number>).progress
+    : undefined;
+  if (['queued'].includes(initialStatus)) {
+    onProgress?.({ phase: 'queued', progress: initialProgress });
+  } else if (['in_progress', 'running', 'processing'].includes(initialStatus)) {
+    onProgress?.({ phase: 'rendering', progress: initialProgress });
+  }
   if (jobId && ['queued', 'in_progress', 'running', 'processing'].includes(initialStatus)) {
     const deadline = Date.now() + 12 * 60 * 1000;
     let latest = created;
@@ -541,6 +562,11 @@ export async function generateVideo(request: VideoGenerationRequest): Promise<Vi
         30000,
       );
       const status = String(latest.status ?? '').toLowerCase();
+      const progress = typeof (latest as Record<string, unknown>).progress === 'number'
+        ? (latest as Record<string, number>).progress
+        : undefined;
+      if (status === 'queued') onProgress?.({ phase: 'queued', progress });
+      else if (['in_progress', 'running', 'processing'].includes(status)) onProgress?.({ phase: 'rendering', progress });
       if (['failed', 'cancelled', 'canceled'].includes(status)) {
         const detail = typeof latest === 'object' && latest !== null
           ? (latest as Record<string, unknown>).error
@@ -571,9 +597,11 @@ export async function generateVideo(request: VideoGenerationRequest): Promise<Vi
 
   const completedBase64 = firstBase64Video(created);
   if (completedBase64) {
+    onProgress?.({ phase: 'completed', progress: 100 });
     return { ...created, status: 'completed', data: { b64_json: completedBase64 } };
   }
 
+  onProgress?.({ phase: 'downloading' });
   if (jobId) {
     const content = await nativeBinaryGet(
       joinEndpoint(profile.baseUrl, `/videos/${encodeURIComponent(jobId)}/content`),
@@ -598,6 +626,7 @@ export async function generateVideo(request: VideoGenerationRequest): Promise<Vi
     };
   }
 
+  onProgress?.({ phase: 'completed', progress: 100 });
   throw new APIError(
     'Video endpoint returned no downloadable video or job id.',
     'MEDIA_EMPTY_RESULT',
